@@ -65,10 +65,11 @@ export const validateAuthBody = (schema: z.ZodSchema) => {
     } catch (error) {
       if (error instanceof z.ZodError) {
         // Log validation failures server-side for monitoring
-        console.error('[Validation Failure]', error.errors);
+        const issues = (error as any).issues || (error as any).errors || [];
+        console.error('[Validation Failure]', issues);
         try {
           diagnosticsService.log('ai_request', 'Auth request failed input validation check', {
-            errors: error.errors.map(e => ({ field: e.path.join('.'), message: e.message })),
+            errors: issues.map((e: any) => ({ field: (e.path || []).join('.'), message: e.message })),
             ip: req.ip
           });
         } catch (_) {}

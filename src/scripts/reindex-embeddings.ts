@@ -111,7 +111,7 @@ async function main() {
     const doc = validDocs[i];
     console.log(`\n[${i + 1}/${validDocs.length}] Processing...`);
     try {
-      await reindexDocument(doc);
+      await reindexDocument({ ...doc, content: doc.content || '' });
       totalSuccess++;
     } catch (err: any) {
       console.error(`  ❌ Failed to re-index document ${doc.id}: ${err.message}`);
