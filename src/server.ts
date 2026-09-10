@@ -1,7 +1,15 @@
 import app from './app';
 import dotenv from 'dotenv';
 import { aiProviderService } from './services/ai-provider.service';
-import './workers/rag.worker';
+
+// Only load the RAG background worker when Redis is available
+if (process.env.REDIS_URL || process.env.REDIS_HOST) {
+  import('./workers/rag.worker').catch(err => {
+    console.warn('[Server] RAG Worker not loaded (Redis not available):', err.message);
+  });
+} else {
+  console.warn('[Server] RAG Worker skipped — no REDIS_URL configured.');
+}
 
 // Ensure environment variables are loaded
 dotenv.config();
