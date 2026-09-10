@@ -4,7 +4,7 @@
   "description": "Production-style AI Tutor backend using Express, TypeScript, and the Gemini API",
   "main": "dist/server.js",
   "scripts": {
-    "build": "tsc",
+    "build": "prisma generate && tsc",
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "reindex": "ts-node --transpile-only src/scripts/reindex-embeddings.ts"
