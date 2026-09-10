@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Tutor Pro — Interactive Learning Workspace</title>
+  
+  <!-- Premium Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- CSS Styling -->
+  <link rel="stylesheet" href="style.css">
+  
+  <!-- Markdown Parser for beautiful AI explanations -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand">
+        <div class="logo-icon">
+          <i data-lucide="graduation-cap"></i>
+        </div>
+        <h1>AI Tutor <span class="gradient-text">Pro</span></h1>
+      </div>
+      
+      <nav class="auth-nav">
+        <div id="user-profile" class="user-profile hidden">
+          <span class="user-email" id="profile-email">student@test.com</span>
+          <button id="btn-logout" class="btn btn-secondary btn-sm">
+            <i data-lucide="log-out"></i> Sign Out
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Login/Register Overlay/Screen -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-card glass">
+      <div class="auth-header">
+        <i data-lucide="book-open" class="auth-logo-icon"></i>
+        <h2>Welcome to AI Tutor Pro</h2>
+        <p>Your modular, database-backed learning companion</p>
+      </div>
+      
+      <div class="tab-buttons">
+        <button id="tab-login" class="tab-btn active">Sign In</button>
+        <button id="tab-register" class="tab-btn">Create Account</button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="form-login" class="auth-form">
+        <div class="form-group">
+          <label for="login-email">Email Address</label>
+          <div class="input-wrapper">
+            <i data-lucide="mail"></i>
+            <input type="email" id="login-email" required placeholder="name@school.com">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <div class="input-wrapper">
+            <i data-lucide="lock"></i>
+            <input type="password" id="login-password" required placeholder="Enter password">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary w-full">Sign In</button>
+      </form>
+
+      <!-- Register Form -->
+      <form id="form-register" class="auth-form hidden">
+        <div class="form-group">
+          <label for="register-email">Email Address</label>
+          <div class="input-wrapper">
+            <i data-lucide="mail"></i>
+            <input type="email" id="register-email" required placeholder="name@school.com">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="register-password">Password</label>
+          <div class="input-wrapper">
+            <i data-lucide="lock"></i>
+            <input type="password" id="register-password" required placeholder="Create strong password">
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary w-full">Create Account</button>
+      </form>
+      
+      <div id="auth-error" class="auth-error-msg hidden"></div>
+    </div>
+  </div>
+
+  <!-- Main Application Workspace (Visible when logged in) -->
+  <main id="app-workspace" class="app-workspace hidden">
+    <div class="workspace-container">
+      
+      <!-- Left Navigation Bar -->
+      <aside class="sidebar glass">
+        <ul class="nav-links">
+          <li>
+            <button id="nav-chat" class="nav-link active">
+              <i data-lucide="message-square"></i> AI Tutoring Chat
+            </button>
+          </li>
+          <li>
+            <button id="nav-rag" class="nav-link">
+              <i data-lucide="file-text"></i> Study Materials (RAG)
+            </button>
+          </li>
+          <li>
+            <button id="nav-quiz" class="nav-link">
+              <i data-lucide="check-square"></i> Interactive Quizzes
+            </button>
+          </li>
+        </ul>
+        
+        <!-- API Status Banner -->
+        <div class="api-status-card">
+          <div class="status-indicator">
+            <span class="pulse green"></span>
+            <span>API Online</span>
+          </div>
+          <p class="description">Gemini 1.5 & SQLite Connected</p>
+        </div>
+      </aside>
+
+      <!-- Workspace Content -->
+      <section class="main-content">
+        
+        <!-- SECTION 1: AI TUTORING CHAT -->
+        <div id="section-chat" class="content-section active">
+          <div class="chat-layout">
+            <div class="chat-main glass">
+              <!-- Chat Header controls -->
+              <div class="chat-header">
+                <div class="chat-title-info">
+                  <h3>Tutor Session</h3>
+                  <p id="chat-session-status">Stateful Dialog Active</p>
+                </div>
+                
+                <div class="chat-options">
+                  <div class="select-wrapper">
+                    <i data-lucide="book-open" class="select-icon"></i>
+                    <select id="select-subject" class="select-subject">
+                      <option value="General">General Tutor</option>
+                      <option value="ComputerScience">Computer Science</option>
+                      <option value="Physics">Physics</option>
+                      <option value="Chemistry">Chemistry</option>
+                      <option value="Biology">Biology</option>
+                      <option value="Mathematics">Mathematics</option>
+                      <option value="History">History</option>
+                    </select>
+                  </div>
+                  
+                  <label class="toggle-switch">
+                    <input type="checkbox" id="checkbox-rag">
+                    <span class="slider"></span>
+                    <span class="toggle-label">
+                      <i data-lucide="sparkles"></i> Use RAG Context
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Chat messages container -->
+              <div id="chat-messages" class="chat-messages">
+                <div class="message system-msg">
+                  <div class="msg-avatar">
+                    <i data-lucide="sparkles"></i>
+                  </div>
+                  <div class="msg-body">
+                    Welcome! I am your AI Tutor. Ask me any conceptual question or toggle <strong>RAG Context</strong> above to teach me from your custom study materials first.
+                  </div>
+                </div>
+              </div>
+
+              <!-- Chat input bar -->
+              <div class="chat-input-area">
+                <form id="chat-form">
+                  <input type="text" id="chat-input" placeholder="Type a concept you'd like explained..." autocomplete="off">
+                  <button type="submit" class="btn btn-primary" id="btn-send-message">
+                    <i data-lucide="send"></i>
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 2: STUDY MATERIALS (RAG) -->
+        <div id="section-rag" class="content-section">
+          <div class="rag-layout">
+            <!-- Upload Box -->
+            <div class="card glass">
+              <div class="card-header">
+                <i data-lucide="upload-cloud" class="card-icon text-indigo"></i>
+                <div>
+                  <h3>Ingest Study Guides</h3>
+                  <p>Upload files (PDF, PNG, JPG) or copy-paste text notes for vector matching.</p>
+                </div>
+              </div>
+              
+              <!-- Tab selectors for RAG Ingestion -->
+              <div class="rag-tab-buttons">
+                <button id="rag-tab-file" type="button" class="rag-tab-btn active">
+                  <i data-lucide="file-up"></i> Upload Files
+                </button>
+                <button id="rag-tab-text" type="button" class="rag-tab-btn">
+                  <i data-lucide="align-left"></i> Paste Text
+                </button>
+              </div>
+
+              <!-- Content Panel 1: File Upload -->
+              <div id="rag-panel-file" class="rag-panel active">
+                <form id="rag-file-form">
+                  <div class="drag-drop-zone" id="drag-drop-zone">
+                    <i data-lucide="file-text" class="upload-icon"></i>
+                    <p class="drag-title">Drag & Drop your study file here</p>
+                    <p class="drag-subtitle">Supports PDF, PNG, JPG, WEBP, TXT, MD (Max 10MB)</p>
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-browse-file">Browse File</button>
+                    <input type="file" id="rag-file-input" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.md" style="display: none;">
+                  </div>
+                  <div id="selected-file-info" class="selected-file-info hidden">
+                    <span class="file-name" id="selected-file-name">filename.pdf</span>
+                    <span class="file-size" id="selected-file-size">1.2 MB</span>
+                    <button type="button" class="btn-clear-file" id="btn-clear-file"><i data-lucide="x"></i></button>
+                  </div>
+                  <button type="submit" class="btn btn-primary w-full" id="btn-file-submit" disabled>
+                    <i data-lucide="plus-circle"></i> Ingest & Vectorize File
+                  </button>
+                </form>
+              </div>
+
+              <!-- Content Panel 2: Paste Text -->
+              <div id="rag-panel-text" class="rag-panel">
+                <form id="rag-upload-form">
+                  <div class="form-group">
+                    <label for="rag-title">Material Title</label>
+                    <input type="text" id="rag-title" placeholder="e.g. Chapter 4: Photosynthesis Notes">
+                  </div>
+                  <div class="form-group">
+                    <label for="rag-content">Material Content (Text)</label>
+                    <textarea id="rag-content" rows="8" placeholder="Paste your study notes or reference text here..."></textarea>
+                  </div>
+                  <button type="submit" class="btn btn-primary w-full" id="btn-rag-submit">
+                    <i data-lucide="plus-circle"></i> Generate & Store Vectors
+                  </button>
+                </form>
+              </div>
+              
+              <div id="rag-success-msg" class="success-banner hidden">
+                <i data-lucide="check-circle-2"></i>
+                <div>
+                  <h4>Document Ingested!</h4>
+                  <p id="rag-success-msg-text">Text chunked and 768-dim embeddings successfully saved in SQLite database.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Documents List -->
+            <div class="card glass">
+              <div class="card-header">
+                <i data-lucide="database" class="card-icon text-purple"></i>
+                <div>
+                  <h3>Uploaded Knowledge Base</h3>
+                  <p>Currently indexed resources for conversational matching</p>
+                </div>
+              </div>
+              <div class="documents-list-container">
+                <ul id="documents-list" class="documents-list">
+                  <li class="empty-list-item">No documents uploaded yet.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECTION 3: INTERACTIVE QUIZZES -->
+        <div id="section-quiz" class="content-section">
+          <div class="quiz-layout">
+            <!-- Quiz Generator Config -->
+            <div class="card glass" id="quiz-setup-card">
+              <div class="card-header">
+                <i data-lucide="pencil" class="card-icon text-pink"></i>
+                <div>
+                  <h3>Generate Structured Quiz</h3>
+                  <p>Enter any study topic and test your comprehension immediately.</p>
+                </div>
+              </div>
+              
+              <form id="quiz-generation-form">
+                <div class="form-group">
+                  <label for="quiz-topic">Quiz Topic</label>
+                  <input type="text" id="quiz-topic" required placeholder="e.g. Mitosis, Big O Notation, Newton's Laws">
+                </div>
+                <div class="form-group">
+                  <label for="quiz-count">Number of Questions</label>
+                  <select id="quiz-count">
+                    <option value="3">3 Questions</option>
+                    <option value="5" selected>5 Questions</option>
+                    <option value="10">10 Questions</option>
+                  </select>
+                </div>
+                <button type="submit" class="btn btn-primary" id="btn-generate-quiz">
+                  <i data-lucide="play-circle"></i> Generate Structured Quiz
+                </button>
+              </form>
+            </div>
+
+            <!-- Active Quiz Sheet -->
+            <div class="card glass hidden" id="quiz-sheet-card">
+              <div class="quiz-sheet-header">
+                <h3 id="quiz-sheet-title">Topic Quiz</h3>
+                <span id="quiz-progress-text">Question 1 of 5</span>
+              </div>
+              
+              <!-- Single Question Display -->
+              <div id="quiz-question-container" class="quiz-question-container">
+                <!-- Injected dynamically -->
+              </div>
+              
+              <div class="quiz-sheet-footer">
+                <button id="quiz-next-btn" class="btn btn-primary" disabled>Submit Answer</button>
+              </div>
+            </div>
+
+            <!-- Quiz Results Report Card -->
+            <div class="card glass hidden" id="quiz-report-card">
+              <div class="report-header">
+                <i data-lucide="award" class="report-icon"></i>
+                <h2>Quiz Evaluation</h2>
+                <div class="score-display">
+                  <span id="report-score">4</span> / <span id="report-total">5</span>
+                </div>
+                <p id="report-percentage">80% Score</p>
+              </div>
+              
+              <div class="report-feedback-list" id="report-feedback-list">
+                <!-- Graded feedback injected here -->
+              </div>
+              
+              <button id="btn-quiz-restart" class="btn btn-primary w-full">Start New Quiz</button>
+            </div>
+
+            <!-- Quiz Attempt History -->
+            <div class="card glass">
+              <div class="card-header">
+                <i data-lucide="history" class="card-icon text-indigo"></i>
+                <div>
+                  <h3>Performance Scorecard</h3>
+                  <p>Track your scores over previous test attempts</p>
+                </div>
+              </div>
+              <div class="history-list-container">
+                <ul id="quiz-history-list" class="quiz-history-list">
+                  <li class="empty-list-item">No quizzes taken yet.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

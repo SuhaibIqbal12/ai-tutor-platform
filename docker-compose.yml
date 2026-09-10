@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  tutor-db:
+    image: postgres:15-alpine
+    container_name: ai-tutor-postgres
+    environment:
+      POSTGRES_USER: tutor_user
+      POSTGRES_PASSWORD: tutor_password
+      POSTGRES_DB: ai_tutor_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - tutor_pgdata:/var/lib/postgresql/data
+    restart: always
+
+  tutor-redis:
+    image: redis:7-alpine
+    container_name: ai-tutor-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - tutor_redisdata:/data
+    restart: always
+
+  tutor-chroma:
+    image: chromadb/chroma:latest
+    container_name: ai-tutor-chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+    ports:
+      - "8000:8000"
+    volumes:
+      - tutor_chromadata:/chroma/chroma
+    restart: always
+
+volumes:
+  tutor_pgdata:
+  tutor_redisdata:
+  tutor_chromadata:

@@ -1,0 +1,241 @@
+// prisma/schema.prisma
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id               String            @id @default(uuid())
+  email            String?           @unique // Optional because OAuth might not provide it immediately
+  password         String?           // Hashed password, optional for OAuth
+  name             String?
+  image            String?
+  role             String            @default("STUDENT") // STUDENT, TEACHER, PARENT, ADMIN
+  
+  accounts         OAuthAccount[]
+  sessions         Session[]
+  devices          Device[]
+  
+  conversations    Conversation[]
+  quizzes          Quiz[]
+  quizAttempts     QuizAttempt[]
+  documents        Document[]
+  profile          UserProfile?
+  masteries        TopicMastery[]
+  studyPlans       StudyPlan[]
+  placementProfile PlacementProfile?
+  longTermMemories LongTermMemory[]
+  
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+model OAuthAccount {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Device {
+  id           String   @id @default(uuid())
+  userId       String
+  deviceToken  String   @unique
+  deviceName   String?
+  lastActiveAt DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserProfile {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  academicYear        String
+  branch              String
+  cgpa                Float
+  strongSubjects      String   // JSON serialized array of strings
+  weakSubjects        String   // JSON serialized array of strings
+  learningPreferences String   // JSON serialized array of strings
+  careerInterests     String   // JSON serialized array of strings
+  
+  targetCompany       String?
+  targetRole          String?
+  
+  // Gamification Fields
+  xp                  Int      @default(0)
+  level               Int      @default(1)
+  currentStreak       Int      @default(0)
+  longestStreak       Int      @default(0)
+  learningCoins       Int      @default(0)
+  badges              String?  @default("[]") // JSON serialized array
+  
+  // Learning DNA Engine Columns
+  learningStyle       String?  @default("Mixed") // Visual, Reading, Practical, Mixed
+  currentLevel        String?  @default("Intermediate") // Beginner, Intermediate, Advanced
+  knowledgeGaps       String?  @default("[]") // JSON serialized array
+  retentionRate       Float?   @default(75.0)
+  studyConsistency    Float?   @default(50.0)
+  confidenceLevel     Float?   @default(70.0)
+  
+  // Phase 2: Analytics & Growth Tracking
+  learningVelocity    Float?   @default(1.0)
+  codingGrowthScore   Float?   @default(0.0)
+  retentionDecay      Float?   @default(0.1) // Decay rate for spaced repetition
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model Conversation {
+  id        String    @id @default(uuid())
+  title     String    // Auto-generated topic name
+  subject   String?   @default("General")
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String       // 'user' or 'model'
+  content        String       // Text of the message
+  createdAt      DateTime     @default(now())
+}
+
+model Quiz {
+  id        String        @id @default(uuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic     String
+  type      String        @default("WRITTEN") // MCQ or WRITTEN
+  questions String        // JSON serialized array
+  attempts  QuizAttempt[]
+  createdAt DateTime      @default(now())
+}
+
+model QuizAttempt {
+  id                String   @id @default(uuid())
+  quizId            String
+  quiz              Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  score             Int
+  answers           String   // JSON serialized student answers
+  evaluationMetrics String?  // JSON serialized metric breakdown for WRITTEN (Accuracy, Completeness, etc.)
+  totalCount        Int
+  createdAt         DateTime @default(now())
+}
+
+model Document {
+  id                    String          @id @default(uuid())
+  title                 String
+  content               String?
+  fileType              String          @default("PDF") // PDF, PPT, TXT, MD, YOUTUBE, WEB
+  userId                String
+  user                  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks                DocumentChunk[]
+  knowledgeGraph        String?         // JSON serialized knowledge graph
+  mindMap               String?         // JSON serialized mind map
+  flashcards            String?         // JSON serialized flashcards
+  relatedTopics         String?         // JSON array
+  prerequisites         String?         // JSON array
+  estimatedReadingTime  Int?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+}
+
+model DocumentChunk {
+  id         String   @id @default(uuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  content    String
+  embedding  String   // JSON serialized float array representing the vector embedding
+  createdAt  DateTime @default(now())
+}
+
+model TopicMastery {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic          String
+  status         String   // "STRONG", "MODERATE", "WEAK"
+  correctCount   Int      @default(0)
+  incorrectCount Int      @default(0)
+  lastTested     DateTime @default(now())
+  
+  // Phase 2: Spaced Repetition
+  spacedRepetitionInterval Int @default(1) // Days until next review
+  nextReviewDate           DateTime @default(now())
+
+  @@unique([userId, topic])
+}
+
+// Phase 2: Long Term Memory
+model LongTermMemory {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category  String   // "CONCEPT_STRUGGLE", "CONCEPT_MASTERY", "GOAL", "PREFERENCE"
+  insight   String   // Text description of what the AI learned about the user
+  source    String   // "TUTOR_CHAT", "QUIZ", "CODING_MENTOR"
+  createdAt DateTime @default(now())
+}
+
+model StudyPlan {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title        String
+  dailyTasks   String    // JSON serialized tasks
+  weeklyTasks  String    // JSON serialized tasks
+  monthlyTasks String    // JSON serialized tasks
+  examDate     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model PlacementProfile {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resumeText         String?
+  atsScore           Int?
+  readinessScore     Int?     @default(0)
+  skills             String?  // JSON serialized array of strings
+  weeklyGoals        String?  // JSON serialized array
+  monthlyGoals       String?  // JSON serialized array
+  mockInterviews     String?  // JSON serialized mock interview chats
+  practiceSQLCount   Int      @default(0)
+  practiceCodeCount  Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}

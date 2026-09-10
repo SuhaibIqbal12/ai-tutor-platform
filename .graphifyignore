@@ -1,0 +1,17 @@
+# Exclude files requiring semantic LLM extraction to build the graph locally without API calls
+*.md
+*.pdf
+*.txt
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.webp
+frontend/public/
+frontend/node_modules/
+node_modules/
+dist/
+.next/
+out/
+.git/
