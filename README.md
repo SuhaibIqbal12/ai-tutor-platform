@@ -1,232 +1,145 @@
 <div align="center">
 
-# 🎓 AI Tutor Platform
-### *Next-Gen Personalized AI Learning & Career Acceleration Engine*
+# AI Tutor Platform
+### A workspace for tutoring, coding practice, and study planning
 
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.4+-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-16.2-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
-[![Express](https://img.shields.io/badge/Express-4.19-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com/)
-[![Google Gemini](https://img.shields.io/badge/Google_Gemini-2.5_Flash-8E75B2?style=for-the-badge&logo=google&logoColor=white)](https://ai.google.dev/)
-[![Prisma](https://img.shields.io/badge/Prisma-5.22-2D3748?style=for-the-badge&logo=prisma&logoColor=white)](https://www.prisma.io/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)](https://supabase.com/)
-[![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-v4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+**TypeScript · Next.js · Express · Prisma · PostgreSQL · Gemini**
 
-<p align="center">
-  <b>An autonomous, multi-agent educational intelligence platform that models each student's unique Learning DNA, provides real-time Socratic AI tutoring, generates personalized career placement roadmaps, and indexes multi-modal course materials using RAG.</b>
-</p>
-
-[Explore Features](#-key-features) • [System Architecture](#-system-architecture) • [Getting Started](#-getting-started) • [Deployment](#-deployment) • [API Documentation](#-api-endpoints)
-
----
+[Getting started](#getting-started) · [Architecture](#architecture) · [Development checks](#development-checks)
 
 </div>
 
-## 🌟 Key Features
+## Overview
 
-### 🧠 1. Socratic AI Tutor & Real-Time Streaming
-- **Adaptive Socratic Dialogue:** Guides students through complex engineering & computer science concepts step-by-step rather than just outputting raw answers.
-- **Low-Latency Streaming:** Token-by-token response generation with formatted LaTeX math equations, markdown rendering, and syntax-highlighted code blocks.
-- **Conversation Memory:** Persistent multi-turn chat memory stored and indexed per student.
+AI Tutor Platform brings tutoring conversations, quizzes, coding exercises, career guidance, study planning, and document-based learning into a student dashboard.
 
-### 🧬 2. Dynamic "Learning DNA" Engine
-- **Cognitive Profiling:** Continuously calculates retention decay rates, study consistency scores, confidence indexes, and subject-specific knowledge gaps.
-- **Adaptive Difficulty:** Dynamically adjusts tutoring vocabulary, challenge complexity, and pacing based on the student's mastery level (Beginner → Intermediate → Advanced).
+The repository contains a Next.js frontend and an Express/TypeScript backend. It is an application under development; configured providers, infrastructure, and end-to-end testing determine which features are available in a given environment.
 
-### 💻 3. Interactive Coding Mentor & Reviewer
-- **Monaco Code Editor:** Full IDE experience in the browser with multi-language syntax support (Python, TypeScript, JavaScript, C++, Java).
-- **Algorithmic Problem Generation:** Creates on-demand coding exercises tailored to the student's weak subjects.
-- **Automated Code Review:** Evaluates student code for time/space complexity, edge cases, best practices, and actionable refactoring suggestions.
+## Project areas
 
-### 🎯 4. Career Intelligence & Placement Coach
-- **Automated Skill Gap Analysis:** Compares declared skills against student career goals (e.g. Full-Stack Engineer, AI Specialist, Quant).
-- **Milestone Roadmaps:** Generates actionable 4-week tactical goals and 3-month strategic milestones.
+| Area | Source |
+| --- | --- |
+| Tutor conversations and streaming | `src/controllers/tutor.controller.ts`, `src/services/tutor.service.ts` |
+| Coding exercises and review | `src/agents/coding.agent.ts`, frontend coding page |
+| Quizzes and evaluation | `src/services/quiz.service.ts` |
+| Study plans and career guidance | Planner and career agents / controllers |
+| Learning profiles and analytics | DNA service, analytics agent, Prisma models |
+| Document ingestion and RAG | RAG service, queue, and worker |
+| Provider fallback | `src/services/ai-provider.service.ts` |
 
-### 📚 5. Multi-Modal RAG & Knowledge Graph
-- **Document Ingestion:** Processes PDF textbooks, lecture notes, slide decks, markdown, and YouTube transcripts.
-- **Background Queueing:** High-performance BullMQ + Redis asynchronous worker pipeline for chunking and vector embedding generation.
-- **Interactive Knowledge Graph:** Visualizes connections between prerequisite and dependent concepts.
+The provider service implements a configured fallback sequence across Gemini, xAI, OpenRouter, OpenAI, and local Ollama. Fallback availability depends on valid credentials, supported models, and provider responses; seamless recovery is not guaranteed.
 
-### 🛡️ 6. Zero-Downtime Multi-Provider AI Fallback
-- **Resilient AI Orchestration:** Automatically switches AI providers with zero user disruption:
-  $$\text{Google Gemini} \longrightarrow \text{Grok (xAI)} \longrightarrow \text{OpenRouter} \longrightarrow \text{OpenAI} \longrightarrow \text{Local Ollama}$$
+## Architecture
 
----
+| Component | Responsibility |
+| --- | --- |
+| `frontend/` | Next.js dashboard, authentication UI, editor, and tutor pages |
+| `src/routes/`, `src/controllers/` | Express API and request handlers |
+| `src/agents/`, `src/engines/` | Learning tasks and orchestration |
+| `src/services/` | Tutor, quizzes, RAG, profiles, and provider logic |
+| `src/middleware/` | Authentication, validation, errors, and rate limits |
+| `prisma/schema.prisma` | PostgreSQL data model |
+| `src/queues/`, `src/workers/` | Redis/BullMQ document processing |
+| `public/` | Additional static client assets |
 
-## 🏗️ System Architecture
+The frontend proxies `/api/*` to `http://localhost:3001` through `frontend/next.config.ts`.
 
-```mermaid
-graph TD
-    subgraph Client ["Frontend (Next.js 16 + Tailwind CSS)"]
-        UI[Dashboard / Tutor UI / Code Editor]
-        AuthClient[Supabase Auth & JWT Client]
-    end
-
-    subgraph Backend ["Backend API (Express + TypeScript)"]
-        Router[API Gateway & Rate Limiter]
-        AuthMW[JWT & RBAC Middleware]
-        
-        subgraph Agents ["Multi-Agent System"]
-            TutorAgent[Teaching & Socratic Agent]
-            CareerAgent[Career & Placement Agent]
-            CodingAgent[Coding Mentor Agent]
-            DNAAgent[Learning DNA & Analytics Agent]
-        end
-
-        Orchestrator[AI Provider Fallback Orchestrator]
-        RAGWorker[BullMQ RAG Ingestion Worker]
-    end
-
-    subgraph Data ["Data & AI Layer"]
-        Supabase[(PostgreSQL Database)]
-        Redis[(Redis Cache & Queue)]
-        Gemini[Google Gemini API]
-        xAI[xAI Grok Fallback]
-        OpenAI[OpenAI Fallback]
-    end
-
-    UI --> Router
-    Router --> AuthMW --> Agents
-    Agents --> Orchestrator
-    Orchestrator --> Gemini
-    Orchestrator -. Fallback .-> xAI
-    Orchestrator -. Fallback .-> OpenAI
-    Agents --> Supabase
-    Router --> RAGWorker --> Redis
-```
-
----
-
-## 🛠️ Tech Stack
-
-| Domain | Technologies |
-| :--- | :--- |
-| **Frontend** | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, Framer Motion, Monaco Editor, Lucide Icons, Recharts |
-| **Backend** | Node.js, Express.js, TypeScript, Zod, Multer, BullMQ |
-| **Database & ORM** | PostgreSQL (Supabase), Prisma ORM |
-| **Cache & Queue** | Redis, ioredis |
-| **AI & Embeddings** | Google Gemini API (`@google/generative-ai`), OpenAI SDK, Xenova Transformers |
-| **Parsing & Extraction** | `pdf-parse`, `officeparser`, `youtube-transcript` |
-
----
-
-## 🚀 Getting Started
+## Getting started
 
 ### Prerequisites
-- **Node.js**: `v20.x` or higher
-- **npm** or **pnpm**
-- **PostgreSQL Database** (Local or Supabase)
-- **Redis** (Local or Upstash)
-- **Google Gemini API Key** (or OpenAI / OpenRouter key)
 
----
+- Node.js compatible with the checked-in Next.js 16 and dependency versions.
+- npm.
+- PostgreSQL, locally or through Supabase.
+- Redis for queued RAG processing.
+- Credentials for the AI providers you intend to use.
+- Your own Supabase configuration for frontend authentication.
 
-### 1. Clone the Repository
+### 1. Backend
+
 ```bash
 git clone https://github.com/SuhaibIqbal12/ai-tutor-platform.git
 cd ai-tutor-platform
-```
-
----
-
-### 2. Backend Setup
-```bash
-# Install backend dependencies
 npm install
-
-# Configure environment variables
 cp .env.example .env
 ```
 
-Edit `.env` with your credentials:
-```env
-PORT=3001
-GEMINI_API_KEY=your_gemini_api_key
-DATABASE_URL="postgresql://user:password@localhost:5432/ai_tutor_db?schema=public"
-JWT_SECRET=your_jwt_secret_key
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your_supabase_anon_key
-```
+On Windows, copy `.env.example` to `.env` through VS Code or PowerShell. Configure the local file with your own values:
 
-Sync database schema & run the backend:
+| Variable | Purpose |
+| --- | --- |
+| `PORT=3001` | Matches the frontend's local API proxy |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `JWT_SECRET` | A long random authentication secret |
+| `GEMINI_API_KEY` | Primary AI provider |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET` | Supabase integration |
+| `REDIS_URL` | Queue connection; add it when using the RAG worker |
+| `XAI_API_KEY`, `OPENROUTER_API_KEY`, `OPENAI_API_KEY` | Optional fallback providers |
+| `OLLAMA_BASE_URL` | Optional local provider |
+
+Keep credentials local. The backend defaults to port 3000 if `PORT` is absent, so explicitly set 3001 to avoid colliding with the frontend.
+
+For a new development database:
+
 ```bash
+npx prisma generate
 npx prisma db push
 npm run dev
 ```
-> Backend runs at: `http://localhost:3001`
 
----
+`prisma db push` synchronizes the schema; use a dedicated development database. Review migrations before applying database changes to existing data.
 
-### 3. Frontend Setup
+### 2. Frontend
+
+Open a second terminal:
+
 ```bash
-cd frontend
-
-# Install frontend dependencies
+cd ai-tutor-platform/frontend
 npm install
-
-# Configure frontend environment variables
-cp .env.example .env.local
 ```
 
-Edit `frontend/.env.local`:
-```env
+Create `frontend/.env.local` manually; a frontend `.env.example` is not included:
+
+```dotenv
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-project-publishable-key
 ```
 
-Run the frontend:
+Use your own project configuration rather than relying on source defaults.
+
 ```bash
 npm run dev
 ```
-> Frontend runs at: `http://localhost:3000`
 
----
+Open http://localhost:3000. The backend should be running on http://localhost:3001.
 
-## 📡 API Endpoints
+## Development checks
 
-| Method | Endpoint | Description | Auth |
-| :--- | :--- | :--- | :---: |
-| `POST` | `/api/auth/register` | Register new student account | Public |
-| `POST` | `/api/auth/login` | Authenticate and obtain JWT token | Public |
-| `POST` | `/api/auth/profile` | Update student onboarding & Learning DNA | Bearer |
-| `GET`  | `/api/auth/profile` | Retrieve student profile, XP, and DNA metrics | Bearer |
-| `POST` | `/api/tutor/ask` | Send question to Socratic AI Tutor | Bearer |
-| `POST` | `/api/career/roadmap` | Generate tailored multi-stage career roadmap | Bearer |
-| `POST` | `/api/coding/exercise` | Generate tailored coding problem | Bearer |
-| `POST` | `/api/coding/review` | Submit student code for automated AI review | Bearer |
-| `GET`  | `/api/rag/graph` | Fetch knowledge graph nodes & prerequisites | Bearer |
-| `GET`  | `/api/diagnostics/health` | Multi-provider connectivity status report | Public |
+Backend:
 
----
+```bash
+npm run build
+```
 
-## 🚢 Deployment
+Frontend:
 
-### 🌐 Frontend (Vercel)
-1. Import repository into [Vercel](https://vercel.com).
-2. Set **Root Directory** to `frontend`.
-3. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-4. Deploy!
+```bash
+npm run lint
+npm run build
+```
 
-### ⚙️ Backend (Render / Railway / Fly.io)
-1. Create a new Web Service pointing to this repository.
-2. Build command: `npm install && npm run build`
-3. Start command: `npm run start`
-4. Set your production environment variables (`DATABASE_URL`, `GEMINI_API_KEY`, `JWT_SECRET`, etc.).
+The root also includes `test-e2e.js`, `test-batch.js`, and `test-transformers.js`. Review their prerequisites before running them: they are development scripts, not a configured `npm test` suite. Some checks can contact AI services and require infrastructure.
 
----
+## Configuration and project status
 
-## 🔒 Security & Privacy
-- **Zero Credentials Leakage:** All secrets, `.env` files, and local build artifacts are strictly excluded via `.gitignore`.
-- **Tenant Isolation:** Every table and AI query is strictly scoped by `userId`.
-- **Brute-Force & Rate Protection:** Redis-backed rate limiter protects all compute-intensive AI endpoints.
+- PostgreSQL is the active Prisma provider. The checked-in `prisma/dev.db` is not the configured PostgreSQL database.
+- The RAG worker is conditionally loaded when Redis configuration is present.
+- Provider diagnostics and streaming depend on the active environment and quota.
+- Production readiness, authorization boundaries, and data handling require validation before deployment.
+- No fresh build or end-to-end pass is claimed by this documentation update.
 
----
+## Maintainer
 
-## 👨‍💻 Author & Maintainer
-- **Suhaib Iqbal** ([@SuhaibIqbal12](https://github.com/SuhaibIqbal12))
-- Email: `suhaibiqbal961@gmail.com`
+[Suhaib Iqbal](https://github.com/SuhaibIqbal12)
 
----
-
-<div align="center">
-  <sub>Built with ❤️ for the future of AI-driven education.</sub>
-</div>
+The backend package declares ISC. A standalone LICENSE file is not currently included.
