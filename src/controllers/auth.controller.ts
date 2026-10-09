@@ -1,73 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import crypto from 'crypto';
+import { AuthService } from '../services/auth.service';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { prisma } from '../config/prisma';
 
-/**
- * Controller endpoint for handling user registration (test stub returning Supabase JWT format).
- */
-export const register = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { email } = req.body;
-    const mockId = `mock_user_${crypto.createHash('md5').update(email).digest('hex')}`;
-
-    // Find or create user record by email to avoid unique constraint conflicts
-    let user = await prisma.user.findFirst({ where: { email } });
-    if (!user) {
-      user = await prisma.user.create({ data: { id: mockId, email } });
-    }
-
-    const secret = process.env.SUPABASE_JWT_SECRET || 'super_secure_supabase_jwt_secret_for_local_testing';
-    const token = jwt.sign({ sub: user.id, email }, secret, { expiresIn: '24h' });
-
-    res.status(201).json({
-      status: 'success',
-      data: {
-        user: { id: user.id, email },
-        token,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
+const authService = new AuthService();
+export const register = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try { res.status(201).json({ status: 'success', data: await authService.register(req.body.email, req.body.password) }); }
+  catch (error) { next(error); }
 };
-
-/**
- * Controller endpoint for handling user login (test stub returning Supabase JWT format).
- */
-export const login = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { email } = req.body;
-    const mockId = `mock_user_${crypto.createHash('md5').update(email).digest('hex')}`;
-
-    // Find or create user record by email to avoid unique constraint conflicts
-    let user = await prisma.user.findFirst({ where: { email } });
-    if (!user) {
-      user = await prisma.user.create({ data: { id: mockId, email } });
-    }
-
-    const secret = process.env.SUPABASE_JWT_SECRET || 'super_secure_supabase_jwt_secret_for_local_testing';
-    const token = jwt.sign({ sub: user.id, email }, secret, { expiresIn: '24h' });
-
-    res.status(200).json({
-      status: 'success',
-      data: {
-        user: { id: user.id, email },
-        token,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
+export const login = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try { res.json({ status: 'success', data: await authService.login(req.body.email, req.body.password) }); }
+  catch (error) { next(error); }
 };
 
 /**

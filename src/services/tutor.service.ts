@@ -1,7 +1,8 @@
 import { aiClient } from '../config/ai.provider';
 import { prisma } from '../config/prisma';
 import { AppError } from '../middleware/error.middleware';
-import { RagService } from './rag.service';
+import { RagService, NO_EVIDENCE } from './rag.service';
+import { GROUNDING_INSTRUCTION, withVerifiedReferences } from '../rag/grounding';
 
 export class TutorService {
   /**
@@ -68,7 +69,7 @@ export class TutorService {
     
     // Background task: Extract and store Long Term Memory
     this.extractAndStoreMemory(conversationId, question, response).catch(err => {
-      console.error('Failed to extract long term memory:', err);
+      console.error('Failed to extract long term memory:');
     });
   }
 
@@ -107,7 +108,7 @@ Ensure your response is valid JSON only.`;
         });
       }
     } catch (error) {
-      console.error('Error extracting memory:', error);
+      console.error('Error extracting memory:');
     }
   }
 
@@ -447,9 +448,10 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
     question: string,
     conversationId?: string,
     ragMode = false,
-    subject?: string
+    subject?: string,
+    documentId?: string
   ): Promise<{ response: string; conversationId: string }> {
-    if (!question || question.trim() === '') {
+    if (typeof question !== 'string' || !question.trim() || question.length > 8000) {
       throw new AppError('Question cannot be empty', 400);
     }
 
@@ -457,23 +459,13 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
       const { activeConversationId, history, subject: activeSubject } = 
         await this.resolveConversation(userId, question, conversationId, subject);
 
-      // Resolve RAG context if enabled
-      let promptWithContext = question;
-      if (ragMode) {
-        const ragService = new RagService();
-        const context = await ragService.searchSimilarChunks(userId, question);
-        if (context) {
-          promptWithContext = `You are a helpful AI Tutor. You MUST answer the user's question using the provided context chunks from uploaded study materials. Always prioritize the retrieved context over your own memory. If the answer is present in the materials, base your explanation directly on them. If the information is not present in the uploaded materials, clearly state that it was not directly found in the documents, and then provide a helpful explanation based on your pre-trained knowledge.
-
-=== UPLOADED STUDY MATERIALS CONTEXT ===
-${context}
-=========================================
-
-Question: ${question}`;
-        }
+      const evidence = ragMode ? await new RagService().retrieve(userId, question, documentId) : undefined;
+      if (evidence && !evidence.sources.length) {
+        await this.saveMessages(activeConversationId, question, NO_EVIDENCE);
+        return { response: NO_EVIDENCE, conversationId: activeConversationId };
       }
-
-      const systemInstruction = await this.buildSystemInstruction(userId, activeSubject);
+      const promptWithContext = evidence ? `Retrieved evidence (JSON lines):\n${evidence.context}\n\nQuestion: ${question}` : question;
+      const systemInstruction = await this.buildSystemInstruction(userId, activeSubject) + (ragMode ? '\n' + GROUNDING_INSTRUCTION : '');
 
       let responseText = '';
 
@@ -486,6 +478,7 @@ Question: ${question}`;
         responseText = result.response.text();
       }
 
+      if (evidence) responseText = withVerifiedReferences(responseText, evidence.sources);
       // Save messages
       await this.saveMessages(activeConversationId, question, responseText);
 
@@ -494,7 +487,7 @@ Question: ${question}`;
         conversationId: activeConversationId,
       };
     } catch (error: any) {
-      console.error('Gemini/Database Error in Tutor Service:', error);
+      console.error('Gemini/Database Error in Tutor Service:');
       this.handleGeminiError(error);
     }
   }
@@ -507,9 +500,10 @@ Question: ${question}`;
     question: string,
     conversationId?: string,
     ragMode = false,
-    subject?: string
+    subject?: string,
+    documentId?: string
   ): Promise<{ stream: AsyncGenerator<string, void, unknown>; conversationId: string }> {
-    if (!question || question.trim() === '') {
+    if (typeof question !== 'string' || !question.trim() || question.length > 8000) {
       throw new AppError('Question cannot be empty', 400);
     }
 
@@ -517,23 +511,22 @@ Question: ${question}`;
       const { activeConversationId, history, subject: activeSubject } = 
         await this.resolveConversation(userId, question, conversationId, subject);
 
-      // Resolve RAG context if enabled
-      let promptWithContext = question;
-      if (ragMode) {
-        const ragService = new RagService();
-        const context = await ragService.searchSimilarChunks(userId, question);
-        if (context) {
-          promptWithContext = `You are a helpful AI Tutor. You MUST answer the user's question using the provided context chunks from uploaded study materials. Always prioritize the retrieved context over your own memory. If the answer is present in the materials, base your explanation directly on them. If the information is not present in the uploaded materials, clearly state that it was not directly found in the documents, and then provide a helpful explanation based on your pre-trained knowledge.
-
-=== UPLOADED STUDY MATERIALS CONTEXT ===
-${context}
-=========================================
-
-Question: ${question}`;
-        }
+      const evidence = ragMode ? await new RagService().retrieve(userId, question, documentId) : undefined;
+      if (evidence && !evidence.sources.length) {
+        await this.saveMessages(activeConversationId, question, NO_EVIDENCE);
+        async function* refusal() { yield NO_EVIDENCE; }
+        return { stream: refusal(), conversationId: activeConversationId };
       }
-
-      const systemInstruction = await this.buildSystemInstruction(userId, activeSubject);
+      const promptWithContext = evidence ? `Retrieved evidence (JSON lines):\n${evidence.context}\n\nQuestion: ${question}` : question;
+      const systemInstruction = await this.buildSystemInstruction(userId, activeSubject) + (ragMode ? '\n' + GROUNDING_INSTRUCTION : '');
+      // Buffer document-mode output until source IDs have been checked. General tutoring remains streamed.
+      if (evidence) {
+        const response = history.length ? await aiClient.startChat(history, systemInstruction).sendMessage(promptWithContext) : await aiClient.generateContent(promptWithContext, systemInstruction);
+        const verified = withVerifiedReferences(response.response.text(), evidence.sources);
+        await this.saveMessages(activeConversationId, question, verified);
+        async function* grounded() { yield verified; }
+        return { stream: grounded(), conversationId: activeConversationId };
+      }
 
       let responseStreamResult: any;
 
@@ -553,7 +546,7 @@ Question: ${question}`;
             try {
               text = chunk.text();
             } catch (chunkErr) {
-              console.warn('Chunk text parsing failed, using fallback:', chunkErr);
+              console.warn('Chunk text parsing failed, using fallback:');
               if (chunk.candidates?.[0]?.content?.parts?.[0]?.text) {
                 text = chunk.candidates[0].content.parts[0].text;
               }
@@ -564,12 +557,8 @@ Question: ${question}`;
             }
           }
         } catch (streamErr: any) {
-          console.error('[TutorService] Mid-stream error:', streamErr.message || streamErr);
-          // Yield a graceful error message so the frontend receives something instead of hanging
-          if (!fullResponse) {
-            yield `\n\n⚠️ The AI provider encountered an error mid-stream: ${streamErr.message?.substring(0, 200) || 'Unknown error'}. Please try again.`;
-          }
-          // Don't rethrow — let the stream close cleanly so SSE [DONE] is sent
+          console.error('[TutorService] Mid-stream error:');
+          throw new AppError('The AI response was interrupted. Please retry.', 502);
         }
 
         if (fullResponse.trim()) {
@@ -582,16 +571,9 @@ Question: ${question}`;
         conversationId: activeConversationId,
       };
     } catch (error: any) {
-      console.error('[TutorService] Streaming setup error:', error.message || error);
-      // Return an error stream so SSE controller can send a graceful message to the frontend
-      const errMsg = error?.message || 'AI provider error. Please try again.';
-      async function* errorStream() {
-        yield `⚠️ ${errMsg.substring(0, 300)}`;
-      }
-      return {
-        stream: errorStream(),
-        conversationId: conversationId || 'error',
-      };
+      console.error('[TutorService] Streaming setup error:');
+      if (error instanceof AppError) throw error;
+      throw new AppError('Unable to generate a response. Check provider availability and try again.', 502);
     }
   }
 
@@ -608,7 +590,7 @@ Question: ${question}`;
     }
 
     throw new AppError(
-      `Failed to generate tutoring response: ${error.message || error}`,
+      'Unable to generate a tutoring response. Check provider availability and try again.',
       502
     );
   }

@@ -1,3 +1,4 @@
+function escapeHtml(value) { return String(value ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;', "'":'&#39;'}[c])); }
 // Global Application State
 const state = {
   token: localStorage.getItem('token') || '',
@@ -317,7 +318,7 @@ function appendMessage(role, text, isMarkdown = false) {
   if (isUser) {
     body.textContent = text;
   } else if (isMarkdown) {
-    body.innerHTML = marked.parse(text);
+    body.innerHTML = DOMPurify.sanitize(marked.parse(text));
   } else {
     body.textContent = text;
   }
@@ -364,7 +365,7 @@ async function handleChatSubmit(e) {
     state.sseSource.onmessage = (event) => {
       if (event.data === '[DONE]') {
         state.sseSource.close();
-        responseBodyElement.innerHTML = marked.parse(streamedText);
+        responseBodyElement.innerHTML = DOMPurify.sanitize(marked.parse(streamedText));
         return;
       }
       
@@ -379,7 +380,7 @@ async function handleChatSubmit(e) {
             responseBodyElement.innerHTML = '';
           }
           streamedText += payload.text;
-          responseBodyElement.innerHTML = marked.parse(streamedText);
+          responseBodyElement.innerHTML = DOMPurify.sanitize(marked.parse(streamedText));
           el.chatMessages.scrollTop = el.chatMessages.scrollHeight;
         } else if (payload.type === 'error') {
           state.sseSource.close();
@@ -415,7 +416,8 @@ async function handleRagSubmit(e) {
   submitBtn.innerHTML = '<span class="status-indicator"><span class="pulse green"></span>Processing & Vectorizing...</span>';
   
   try {
-    await apiCall('/api/rag/upload', 'POST', { title, content });
+    const uploaded = await apiCall('/api/rag/upload', 'POST', { title, content });
+    await waitForDocument(uploaded.data.documentId);
     
     el.ragTitle.value = '';
     el.ragContent.value = '';
@@ -457,11 +459,11 @@ async function loadRAGDocuments() {
       
       li.innerHTML = `
         <div class="doc-info">
-          <span class="doc-title">${doc.title}</span>
+          <span class="doc-title">${escapeHtml(doc.title)}</span>
           <span class="doc-date">Uploaded ${date}</span>
         </div>
         <span class="status-indicator">
-          <span class="pulse green"></span> Vector Indexed
+          <span></span> ${escapeHtml(doc.status === 'READY' ? 'Ready for questions' : doc.status)}
         </span>
       `;
       el.documentsList.appendChild(li);
@@ -514,11 +516,11 @@ function renderQuizQuestion() {
   el.quizProgressText.textContent = `Question ${qIndex + 1} of ${quiz.questions.length}`;
   
   el.quizQuestionContainer.innerHTML = `
-    <div class="quiz-q-text">${question.question}</div>
+    <div class="quiz-q-text">${escapeHtml(question.question)}</div>
     <div class="quiz-options" id="quiz-options-list">
       ${question.options.map((opt, idx) => `
         <button class="quiz-option-btn" data-index="${idx}">
-          ${String.fromCharCode(65 + idx)}. ${opt}
+          ${String.fromCharCode(65 + idx)}. ${escapeHtml(opt)}
         </button>
       `).join('')}
     </div>
@@ -574,7 +576,7 @@ function handleQuizNextStep() {
       <p style="font-weight: 600; color: ${isCorrect ? 'var(--success)' : 'var(--danger)'}; margin-bottom: 6px;">
         ${isCorrect ? '✓ Correct Answer!' : '✗ Incorrect Answer.'}
       </p>
-      <p>${question.explanation}</p>
+      <p>${escapeHtml(question.explanation)}</p>
     `;
     feedbackBox.classList.remove('hidden');
     
@@ -618,13 +620,13 @@ async function submitQuizResults() {
       item.className = `report-feedback-item ${isCorrect ? 'correct' : 'incorrect'}`;
       item.innerHTML = `
         <h4>Question ${idx + 1}: ${isCorrect ? 'Correct' : 'Incorrect'}</h4>
-        <p style="font-weight: 500; margin-bottom: 6px;">${q.question}</p>
+        <p style="font-weight: 500; margin-bottom: 6px;">${escapeHtml(q.question)}</p>
         <p style="font-size: 12px; color: var(--text-muted);">
-          Your Answer: ${q.options[q.studentAnswer]} <br>
-          Correct Answer: ${q.options[q.correctAnswerIndex]}
+          Your Answer: ${escapeHtml(q.options[q.studentAnswer])} <br>
+          Correct Answer: ${escapeHtml(q.options[q.correctAnswerIndex])}
         </p>
         <p style="font-size: 12px; margin-top: 4px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 6px;">
-          <strong>Explanation:</strong> ${q.explanation}
+          <strong>Explanation:</strong> ${escapeHtml(q.explanation)}
         </p>
       `;
       el.reportFeedbackList.appendChild(item);
@@ -672,7 +674,7 @@ async function loadQuizHistory() {
       const li = document.createElement('li');
       li.innerHTML = `
         <div class="doc-info">
-          <span class="history-topic">${attempt.topic}</span>
+          <span class="history-topic">${escapeHtml(attempt.topic)}</span>
           <span class="history-date">Completed ${date}</span>
         </div>
         <span class="history-score ${pass ? 'pass' : 'fail'}">
@@ -762,7 +764,9 @@ async function handleRagFileSubmit(e) {
     clearSelectedFile();
 
     // Show success banner
-    el.ragSuccessMsgText.textContent = `File "${data.data.title}" successfully parsed and stored into SQLite vector database (${data.data.chunksCount} chunks).`;
+    el.ragSuccessMsgText.textContent = `Upload accepted. Waiting for indexing...`;
+    await waitForDocument(data.data.documentId);
+    el.ragSuccessMsgText.textContent = 'Document indexed and ready for questions.';
     el.ragSuccessMsg.classList.remove('hidden');
     setTimeout(() => el.ragSuccessMsg.classList.add('hidden'), 6000);
 
@@ -778,3 +782,17 @@ async function handleRagFileSubmit(e) {
 
 // Run initial configurations
 document.addEventListener('DOMContentLoaded', init);
+
+async function waitForDocument(documentId) {
+  const started = Date.now();
+  while (Date.now() - started < 10 * 60 * 1000) {
+    const result = await apiCall(`/api/rag/progress/${documentId}`);
+    const progress = result.data;
+    el.ragSuccessMsg.classList.remove('hidden');
+    el.ragSuccessMsgText.textContent = `Processing: ${progress.stage || progress.status}`;
+    if (progress.tutorReady && progress.status === 'completed') return;
+    if (progress.status === 'failed') throw new Error(progress.error || 'Indexing failed.');
+    await new Promise(resolve => setTimeout(resolve, 10000));
+  }
+  throw new Error('Indexing is taking longer than expected. Check the worker and return to Sources later.');
+}

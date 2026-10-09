@@ -1,4 +1,5 @@
 "use client";
+import { errorMessage } from "@/lib/contracts";
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -86,8 +87,8 @@ export default function LoginPage() {
         // Redirect to student profile onboarding wizard
         router.replace("/onboarding");
       }
-    } catch (err: any) {
-      setError(err.message || "Authentication failed.");
+    } catch (err: unknown) {
+      setError(errorMessage(err) || "Authentication failed.");
     } finally {
       setLoading(false);
     }
@@ -95,45 +96,26 @@ export default function LoginPage() {
 
   const handleOAuthLogin = async (provider: "google" | "github") => {
     setError("");
+    if (!supabase) { setError("Social sign-in is not configured. Use email and password."); return; }
     setLoading(true);
     try {
-      const email = `${provider}-student@academy.com`;
-      const password = "Password123"; // Meets zod requirements
-      
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-      const resData = await res.json();
-      if (!res.ok) {
-        throw new Error(resData.message || "OAuth login stub failed.");
-      }
-      
-      const token = resData.data.token;
-      const userEmail = resData.data.user.email || email;
-
-      setStoredToken(token);
-      setStoredEmail(userEmail);
-
-      const profileRes = await fetch("/api/auth/profile", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const profileData = await profileRes.json();
-
-      if (profileData.status === "success" && profileData.data.profile) {
-        localStorage.setItem("profile", JSON.stringify(profileData.data.profile));
-        window.dispatchEvent(new Event("profileUpdated"));
-        router.replace("/dashboard");
-      } else {
-        router.replace("/onboarding");
-      }
-    } catch (err: any) {
-      setError(err.message || "Social login failed.");
-    } finally {
+      const { error } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: `${window.location.origin}/login` } });
+      if (error) throw error;
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : "Social sign-in failed.");
       setLoading(false);
     }
   };
+  useEffect(() => {
+    if (!supabase) return;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) return;
+      setStoredToken(session.access_token);
+      setStoredEmail(session.user.email || "");
+      router.replace("/dashboard");
+    });
+    return () => subscription.unsubscribe();
+  }, [router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-radial from-slate-900 via-slate-950 to-slate-950 px-4 py-12 sm:px-6 lg:px-8 relative overflow-hidden font-sans">

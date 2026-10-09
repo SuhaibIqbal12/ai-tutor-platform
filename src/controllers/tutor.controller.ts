@@ -13,7 +13,7 @@ export const askQuestion = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { question, conversationId, ragMode, subject } = req.body;
+    const { question, conversationId, ragMode, subject, documentId } = req.body;
     const userId = req.user?.id;
 
     if (!userId) {
@@ -25,7 +25,7 @@ export const askQuestion = async (
     }
 
     const { response, conversationId: activeConversationId } =
-      await tutorService.getTutoringResponse(userId, question, conversationId, !!ragMode, subject ? String(subject) : undefined);
+      await tutorService.getTutoringResponse(userId, question, conversationId, !!ragMode, subject ? String(subject) : undefined, documentId ? String(documentId) : undefined);
 
     res.status(200).json({
       status: 'success',
@@ -48,7 +48,7 @@ export const askQuestionStream = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { question, conversationId, ragMode, subject } = req.query;
+    const { question, conversationId, ragMode, subject, documentId } = req.method === 'POST' ? req.body : req.query;
     const userId = req.user?.id;
 
     if (!userId) {
@@ -73,7 +73,7 @@ export const askQuestionStream = async (
     res.setHeader('Connection', 'keep-alive');
     res.flushHeaders();
 
-    const isRag = ragMode === 'true';
+    const isRag = ragMode === 'true' || ragMode === true;
     const convId = conversationId ? String(conversationId) : undefined;
     const subjStr = subject ? String(subject) : undefined;
 
@@ -82,7 +82,8 @@ export const askQuestionStream = async (
       question,
       convId,
       isRag,
-      subjStr
+      subjStr,
+      documentId ? String(documentId) : undefined
     );
 
     // Write initial meta message containing conversationId
@@ -96,14 +97,14 @@ export const askQuestionStream = async (
     res.write('data: [DONE]\n\n');
     res.end();
   } catch (error: any) {
-    console.error('SSE Controller Error:', error);
+    console.error('SSE Controller Error:');
     if (res.headersSent) {
-      res.write(`data: ${JSON.stringify({ type: 'error', message: error.message || error })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'error', message: error.statusCode && error.statusCode < 500 ? error.message : 'Tutor response unavailable. Please try again.' })}\n\n`);
       res.end();
     } else {
       res.status(500).json({
         success: false,
-        error: error.message
+        error: 'Tutor response unavailable. Please try again.'
       });
     }
   }

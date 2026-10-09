@@ -9,6 +9,7 @@ export default function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    const timer = setTimeout(() => {
     setMounted(true);
     const storedTheme = localStorage.getItem("theme") as "light" | "dark" | null;
     const initialTheme = storedTheme || "dark";
@@ -19,6 +20,8 @@ export default function ThemeToggle() {
     } else {
       document.documentElement.classList.remove("dark");
     }
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const toggleTheme = () => {

@@ -39,7 +39,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         // If no token locally, try to get from Supabase (wrapped in try-catch so it doesn't crash us)
         try {
           const { supabase } = await import("@/lib/supabase");
-          const { data: { session } } = await supabase.auth.getSession();
+          const { data: { session } } = await supabase?.auth.getSession() || { data: { session: null } };
           
           if (session) {
             localStorage.setItem("token", session.access_token);

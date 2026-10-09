@@ -1,14 +1,14 @@
-﻿// frontend/src/app/(dashboard)/career/page.tsx
+// frontend/src/app/(dashboard)/career/page.tsx
 "use client";
+import type { ResumeAnalysis, Challenge, Scorecard, Roadmap } from "@/lib/contracts";
+import { errorMessage } from "@/lib/contracts";
 
 import React, { useState } from "react";
 import {
   Compass,
   FileBadge,
   MessageSquare,
-  Award,
   TrendingUp,
-  AlertTriangle,
   FileText,
   Star,
   ThumbsUp,
@@ -45,12 +45,12 @@ export default function CareerPage() {
   const [subTab, setSubTab] = useState<"roadmap" | "ats" | "interview" | "practice">("roadmap");
   const [loading, setLoading] = useState(false);
   const [customSkills, setCustomSkills] = useState("");
-  const [roadmap, setRoadmap] = useState<any>(null);
+  const [roadmap, setRoadmap] = useState<Roadmap | null>(null);
   const [resumeRole, setResumeRole] = useState("Software Engineer");
   const [resumeText, setResumeText] = useState("");
-  const [resumeAnalysis, setResumeAnalysis] = useState<any>(null);
+  const [resumeAnalysis, setResumeAnalysis] = useState<ResumeAnalysis | null>(null);
   const [interviewType, setInterviewType] = useState<"Technical" | "HR">("Technical");
-  const [interviewHistory, setInterviewHistory] = useState<any[]>([]);
+  const [interviewHistory, setInterviewHistory] = useState<{ role: "student" | "interviewer"; text: string }[]>([]);
   const [interviewInput, setInterviewInput] = useState("");
   const [interviewerText, setInterviewerText] = useState(
     "Hello! Welcome to your mock interview. Tell me about a challenging project you have worked on."
@@ -58,9 +58,9 @@ export default function CareerPage() {
   const [interviewFeedback, setInterviewFeedback] = useState("");
   const [interviewEnded, setInterviewEnded] = useState(false);
   const [interviewLoading, setInterviewLoading] = useState(false);
-  const [scorecard, setScorecard] = useState<any>(null);
+  const [scorecard, setScorecard] = useState<Scorecard | null>(null);
   const [practiceType, setPracticeType] = useState<"aptitude" | "sql" | "system_design">("aptitude");
-  const [challenge, setChallenge] = useState<any>(null);
+  const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [showAnswer, setShowAnswer] = useState(false);
 
   const handleGenerateRoadmap = async () => {
@@ -69,7 +69,7 @@ export default function CareerPage() {
     try {
       const res = await apiRequest("/api/career/roadmap", "POST", { skills: skillsArr });
       if (res.status === "success") setRoadmap(res.data);
-    } catch (err: any) { alert("Failed: " + err.message); }
+    } catch (err: unknown) { alert("Failed: " + errorMessage(err)); }
     finally { setLoading(false); }
   };
 
@@ -79,7 +79,7 @@ export default function CareerPage() {
     try {
       const res = await apiRequest("/api/placement/resume", "POST", { resumeText, targetRole: resumeRole });
       if (res.status === "success") setResumeAnalysis(res.data.analysis);
-    } catch (err: any) { alert("Failed: " + err.message); }
+    } catch (err: unknown) { alert("Failed: " + errorMessage(err)); }
     finally { setLoading(false); }
   };
 
@@ -99,7 +99,7 @@ export default function CareerPage() {
         setInterviewHistory((prev) => [...prev, { role: "interviewer" as const, text: res.data.interviewerMessage }]);
         if (res.data.endSession && res.data.scorecard) setScorecard(res.data.scorecard);
       }
-    } catch (err: any) { alert("Error: " + err.message); }
+    } catch (err: unknown) { alert("Error: " + errorMessage(err)); }
     finally { setInterviewLoading(false); }
   };
 
@@ -113,7 +113,7 @@ export default function CareerPage() {
     try {
       const res = await apiRequest(`/api/placement/practice?type=${practiceType}`);
       if (res.status === "success") setChallenge(res.data);
-    } catch (err: any) { alert("Failed: " + err.message); }
+    } catch (err: unknown) { alert("Failed: " + errorMessage(err)); }
     finally { setLoading(false); }
   };
 
@@ -126,7 +126,7 @@ export default function CareerPage() {
 
       <div className="flex bg-secondary/80 p-1.5 rounded-xl border border-border flex-wrap gap-1">
         {([["roadmap","AI Coach Roadmap"], ["ats","ATS Auditor"], ["interview","Mock Interview"], ["practice","Practice Hub"]] as [string,string][]).map(([key, label]) => (
-          <button key={key} onClick={() => setSubTab(key as any)}
+          <button key={key} onClick={() => setSubTab(key as typeof subTab)}
             className={`flex-1 min-w-[110px] py-2 text-xs font-bold rounded-lg cursor-pointer transition-colors ${subTab === key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
             {label}
           </button>
@@ -154,7 +154,7 @@ export default function CareerPage() {
                   <h3 className="text-sm font-bold border-b border-border pb-2 flex items-center gap-1.5">
                     <TrendingUp className="h-4 w-4 text-indigo-400" />{roadmap.title}
                   </h3>
-                  {roadmap.roadmapStages?.map((stage: any, i: number) => (
+                  {roadmap.roadmapStages?.map((stage, i: number) => (
                     <div key={i} className="p-4 bg-secondary/40 border border-border rounded-xl text-xs space-y-1.5">
                       <span className="font-extrabold flex items-center gap-2">
                         <span className="w-5 h-5 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 flex items-center justify-center text-[10px] font-bold">{i+1}</span>
@@ -254,7 +254,7 @@ export default function CareerPage() {
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Session Type:</span>
-                <select value={interviewType} onChange={(e) => setInterviewType(e.target.value as any)}
+                <select value={interviewType} onChange={(e) => setInterviewType(e.target.value as typeof interviewType)}
                   disabled={interviewHistory.length > 0}
                   className="px-2.5 py-1 bg-secondary border border-border text-[10px] font-bold focus:outline-none rounded-lg disabled:opacity-50">
                   <option>Technical</option>
@@ -390,7 +390,7 @@ export default function CareerPage() {
                     <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider border-b border-border pb-2">
                       Answer-by-Answer Breakdown
                     </p>
-                    {scorecard.answerBreakdown.map((item: any, i: number) => (
+                    {scorecard.answerBreakdown.map((item, i: number) => (
                       <div key={i} className="p-4 bg-secondary/30 border border-border rounded-xl space-y-3 hover:border-indigo-500/20 transition-colors">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0 space-y-1.5">
@@ -431,7 +431,7 @@ export default function CareerPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border pb-3 gap-3">
             <h3 className="text-sm font-bold">Placement Challenge Practice Hub</h3>
             <div className="flex items-center gap-2">
-              <select value={practiceType} onChange={(e) => setPracticeType(e.target.value as any)}
+              <select value={practiceType} onChange={(e) => setPracticeType(e.target.value as typeof practiceType)}
                 className="px-2.5 py-1 bg-secondary border border-border text-[10px] font-bold rounded-lg focus:outline-none">
                 <option value="aptitude">Quantitative Aptitude</option>
                 <option value="sql">SQL Practice</option>

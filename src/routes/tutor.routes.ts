@@ -8,6 +8,7 @@ const router = Router();
 router.post('/ask', authMiddleware as any, askQuestion);
 
 // GET /api/tutor/ask/stream (Server-Sent Events streaming response)
+router.post('/ask/stream', authMiddleware as any, askQuestionStream);
 router.get('/ask/stream', authMiddleware as any, askQuestionStream);
 
 export default router;

@@ -1,8 +1,10 @@
 // frontend/src/app/(dashboard)/coding/page.tsx
 "use client";
+import type { Exercise, CodeReview } from "@/lib/contracts";
+import { errorMessage } from "@/lib/contracts";
 
 import React, { useState } from "react";
-import { Terminal, Sparkles, Code2, AlertTriangle, ShieldCheck, HelpCircle } from "lucide-react";
+import { Terminal, Code2, AlertTriangle, ShieldCheck, HelpCircle } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import CodeEditor from "@/components/CodeEditor";
 
@@ -12,9 +14,9 @@ export default function CodingPage() {
   const [diff, setDiff] = useState<"easy" | "medium" | "hard">("medium");
 
   // Exercise & Workspace States
-  const [exercise, setExercise] = useState<any>(null);
+  const [exercise, setExercise] = useState<Exercise | null>(null);
   const [code, setCode] = useState("");
-  const [review, setReview] = useState<any>(null);
+  const [review, setReview] = useState<CodeReview | null>(null);
 
   // Loading/Submission States
   const [loading, setLoading] = useState(false);
@@ -35,8 +37,8 @@ export default function CodingPage() {
         setExercise(res.data);
         setCode(res.data.starterCode || "");
       }
-    } catch (err: any) {
-      alert("Failed to retrieve coding challenge: " + err.message);
+    } catch (err: unknown) {
+      alert("Failed to retrieve coding challenge: " + errorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -56,8 +58,8 @@ export default function CodingPage() {
       if (res.status === "success") {
         setReview(res.data);
       }
-    } catch (err: any) {
-      alert("Failed to evaluate submission: " + err.message);
+    } catch (err: unknown) {
+      alert("Failed to evaluate submission: " + errorMessage(err));
     } finally {
       setSubmittingCode(false);
     }
@@ -127,7 +129,7 @@ export default function CodingPage() {
               </label>
               <select
                 value={diff}
-                onChange={(e) => setDiff(e.target.value as any)}
+                onChange={(e) => setDiff(e.target.value as typeof diff)}
                 className="w-full px-3 py-2 bg-secondary/40 border border-border text-slate-300 text-xs focus:outline-none focus:border-indigo-500 rounded-xl transition-colors"
               >
                 <option value="easy">Easy</option>
@@ -169,7 +171,7 @@ export default function CodingPage() {
                       Sample Test Cases:
                     </span>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1 text-[10px] text-foreground/75 font-semibold">
-                      {exercise.testCases.map((tc: any, i: number) => (
+                      {exercise.testCases.map((tc, i: number) => (
                         <div key={i} className="p-3 bg-secondary/35 border border-border rounded-xl">
                           <div>
                             <span className="text-muted-foreground">Input:</span> {tc.input}

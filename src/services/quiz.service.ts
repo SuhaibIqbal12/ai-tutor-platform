@@ -1,3 +1,4 @@
+import { validateQuestions } from '../rag/quiz-validation';
 import { genAI, GEMINI_MODEL } from '../config/gemini';
 import { prisma } from '../config/prisma';
 import { AppError } from '../middleware/error.middleware';
@@ -62,6 +63,8 @@ Each question must have exactly 4 choices.`;
         throw new Error('Invalid quiz format returned by Gemini.');
       }
 
+      parsedData.questions = parsedData.questions.map((q: any) => ({ ...q, type: 'mcq', difficulty: currentLevel.toLowerCase() }));
+      validateQuestions(parsedData.questions, questionCount);
       // Save generated quiz to database
       const quiz = await prisma.quiz.create({
         data: {
@@ -77,7 +80,7 @@ Each question must have exactly 4 choices.`;
         questions: parsedData.questions,
       };
     } catch (error: any) {
-      console.error('Quiz Generation Error:', error);
+      console.error('Quiz Generation Error:');
       if (error.message && error.message.includes('API key not valid')) {
         throw new AppError('Gemini API Key is invalid, expired, or missing. Please verify the GEMINI_API_KEY in your .env file.', 401);
       }
@@ -93,7 +96,7 @@ Each question must have exactly 4 choices.`;
       where: { id: quizId },
     });
 
-    if (!quiz) {
+    if (!quiz || quiz.userId !== userId) {
       throw new AppError('Quiz not found.', 404);
     }
 

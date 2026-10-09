@@ -1,35 +1,35 @@
 // frontend/src/app/(dashboard)/quizzes/page.tsx
 "use client";
+import type { QuizReport, QuizHistory, Heatmap } from "@/lib/contracts";
+import { errorMessage } from "@/lib/contracts";
 
 import React, { useState, useEffect } from "react";
 import {
   Award,
   PlayCircle,
-  CheckSquare,
   Sparkles,
-  ChevronRight,
   TrendingUp,
   AlertTriangle,
   History
 } from "lucide-react";
-import { apiRequest, Quiz, QuizQuestion } from "@/lib/api";
+import { apiRequest, Quiz } from "@/lib/api";
 
 export default function QuizzesPage() {
   // Heatmap & revision states
-  const [heatmap, setHeatmap] = useState<any>(null);
-  const [history, setHistory] = useState<any[]>([]);
+  const [heatmap, setHeatmap] = useState<Heatmap | null>(null);
+  const [history, setHistory] = useState<QuizHistory[]>([]);
   const [revisionPlan, setRevisionPlan] = useState("");
   
   // Quiz creation states
   const [quizTopic, setQuizTopic] = useState("");
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
-  const [userAnswers, setUserAnswers] = useState<any[]>([]);
+  const [userAnswers, setUserAnswers] = useState<(string | number)[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [mcqSelectedIdx, setMcqSelectedIdx] = useState<number | null>(null);
   const [subjectiveAns, setSubjectiveAns] = useState("");
   
   // Report states
-  const [quizReport, setQuizReport] = useState<any>(null);
+  const [quizReport, setQuizReport] = useState<QuizReport | null>(null);
   
   // General UI states
   const [loading, setLoading] = useState(false);
@@ -53,7 +53,8 @@ export default function QuizzesPage() {
   };
 
   useEffect(() => {
-    fetchRevisionData();
+    const timer = setTimeout(() => {
+    void fetchRevisionData();
 
     // Check for pre-populated topic from tutor companion redirections
     if (typeof window !== "undefined") {
@@ -63,6 +64,8 @@ export default function QuizzesPage() {
         sessionStorage.removeItem("pendingQuizTopic");
       }
     }
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const handleGenerateRevisionPlan = async () => {
@@ -72,8 +75,8 @@ export default function QuizzesPage() {
       if (planRes.status === "success") {
         setRevisionPlan(planRes.data.plan);
       }
-    } catch (err: any) {
-      alert("AI Planner failure: " + err.message);
+    } catch (err: unknown) {
+      alert("AI Planner failure: " + errorMessage(err));
     } finally {
       setGeneratingRevision(false);
     }
@@ -105,8 +108,8 @@ export default function QuizzesPage() {
         setMcqSelectedIdx(null);
         setSubjectiveAns("");
       }
-    } catch (err: any) {
-      alert("Failed to compile quiz: " + err.message);
+    } catch (err: unknown) {
+      alert("Failed to compile quiz: " + errorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -120,6 +123,7 @@ export default function QuizzesPage() {
     // Store current response
     const copyAnswers = [...userAnswers];
     if (currentQ.type === "mcq" || currentQ.type === "tf") {
+      if (mcqSelectedIdx === null) return;
       copyAnswers[currentIdx] = mcqSelectedIdx;
     } else {
       copyAnswers[currentIdx] = subjectiveAns;
@@ -143,8 +147,8 @@ export default function QuizzesPage() {
           setActiveQuiz(null);
           fetchRevisionData();
         }
-      } catch (err: any) {
-        alert("Failed to grade test: " + err.message);
+      } catch (err: unknown) {
+        alert("Failed to grade test: " + errorMessage(err));
       } finally {
         setSubmittingQuiz(false);
       }
@@ -174,7 +178,7 @@ export default function QuizzesPage() {
             {heatmap ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-5 gap-2">
-                  {heatmap.rawList.map((item: any, idx: number) => {
+                  {heatmap.rawList.map((item, idx: number) => {
                     let colorClass = "bg-yellow-400 dark:bg-yellow-500/80";
                     if (item.status === "STRONG") colorClass = "bg-emerald-500 dark:bg-emerald-600/80";
                     else if (item.status === "WEAK") colorClass = "bg-red-500 dark:bg-red-650/80";
@@ -383,7 +387,7 @@ export default function QuizzesPage() {
               </div>
 
               <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1">
-                {quizReport.gradedQuestions.map((q: any, i: number) => (
+                {quizReport.gradedQuestions.map((q, i: number) => (
                   <div
                     key={i}
                     className={`p-4 border rounded-xl space-y-2 ${
@@ -400,7 +404,7 @@ export default function QuizzesPage() {
                       Your answer choice:{" "}
                       <span className="font-bold text-foreground">
                         {q.type === "mcq" || q.type === "tf"
-                          ? q.options?.[q.studentAnswer] || "None"
+                          ? q.options?.[Number(q.studentAnswer)] || "None"
                           : q.studentAnswer}
                       </span>
                     </p>

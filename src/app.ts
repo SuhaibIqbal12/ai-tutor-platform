@@ -17,10 +17,11 @@ import { errorHandler, AppError } from './middleware/error.middleware';
 const app = express();
 
 // Enable Cross-Origin Resource Sharing (CORS)
-app.use(cors());
+if (process.env.TRUST_PROXY === 'true') app.set('trust proxy', 1);
+app.use(cors({ origin: process.env.FRONTEND_ORIGIN?.split(',') || ['http://localhost:3000'] }));
 
 // Parse incoming JSON payloads
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 
 import { apiLimiter } from './middleware/rateLimit.middleware';
 // Apply the rate limiting middleware to all API requests
@@ -29,6 +30,9 @@ app.use('/api', apiLimiter);
 // Serve static frontend files from 'public' directory (kept as legacy support/fallback)
 app.use(express.static(path.join(__dirname, '../public')));
 
+// Serve the sanitizer used by the legacy client from the installed, locked dependency.
+app.get('/vendor/purify.min.js', (_req, res) => res.sendFile(path.join(path.dirname(require.resolve('dompurify')), 'purify.min.js')));
+
 // Server health check route
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({
@@ -36,6 +40,13 @@ app.get('/health', (req: Request, res: Response) => {
     message: 'AI Tutor Backend is healthy and running.',
     timestamp: new Date().toISOString(),
   });
+});
+
+// Readiness is separate from liveness and contains no document/user data.
+app.get('/ready', async (_req, res) => {
+  const { diagnosticsService } = await import('./services/diagnostics.service');
+  const data = await diagnosticsService.getReadiness();
+  res.status(data.ready ? 200 : 503).json(data);
 });
 
 // Register API Routes

@@ -105,7 +105,7 @@ Generate realistic daily tasks, a 4-week calendar breakdown, and a 3-month long-
         examDate: plan.examDate
       };
     } catch (err: any) {
-      console.error('Planner Agent Study Plan Generation Error:', err);
+      console.error('Planner Agent Study Plan Generation Error:');
       throw new AppError(`Failed to generate study plan: ${err.message || err}`, 502);
     }
   }

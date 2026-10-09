@@ -1,11 +1,12 @@
+import 'dotenv/config';
 import app from './app';
 import dotenv from 'dotenv';
 import { aiProviderService } from './services/ai-provider.service';
 
 // Only load the RAG background worker when Redis is available
-if (process.env.REDIS_URL || process.env.REDIS_HOST) {
+if ((process.env.REDIS_URL || process.env.REDIS_HOST) && process.env.RAG_WORKER_ENABLED === 'true') {
   import('./workers/rag.worker').catch(err => {
-    console.warn('[Server] RAG Worker not loaded (Redis not available):', err.message);
+    console.warn('[Server] RAG Worker not loaded. Check Redis configuration.');
   });
 } else {
   console.warn('[Server] RAG Worker skipped — no REDIS_URL configured.');
@@ -17,7 +18,7 @@ dotenv.config();
 // Verify API keys configurations on startup
 aiProviderService.validateKeys();
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // Start the Express HTTP listener
 const server = app.listen(PORT, () => {
@@ -31,13 +32,13 @@ const server = app.listen(PORT, () => {
 // Process-level exception handling for unexpected errors
 process.on('uncaughtException', (err: Error) => {
   console.error('CRITICAL: Uncaught Exception detected! Server shutting down...');
-  console.error(err.name, err.message, err.stack);
+  console.error('Unhandled application exception.');
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason: any) => {
   console.error('CRITICAL: Unhandled Promise Rejection detected! Gracefully shutting down...');
-  console.error(reason);
+  console.error('Unhandled application rejection.');
   server.close(() => {
     process.exit(1);
   });

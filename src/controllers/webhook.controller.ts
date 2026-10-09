@@ -1,4 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
+import { timingSafeEqual } from 'crypto';
+import { AppError } from '../middleware/error.middleware';
 import { prisma } from '../config/prisma';
 
 /**
@@ -10,6 +12,13 @@ export const supabaseWebhook = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const expected = process.env.SUPABASE_WEBHOOK_SECRET;
+    const supplied = req.headers['x-webhook-secret'];
+    if (!expected) throw new AppError('User synchronization webhook is not configured.', 503);
+    if (typeof supplied !== 'string' || Buffer.byteLength(supplied) !== Buffer.byteLength(expected) ||
+        !timingSafeEqual(Buffer.from(supplied), Buffer.from(expected))) {
+      throw new AppError('Webhook authentication failed.', 401);
+    }
     const { type, record, event, user } = req.body;
     
     // Extract ID, email, and operation type dynamically to support multiple webhook payload structures
@@ -32,7 +41,7 @@ export const supabaseWebhook = async (
       await prisma.user.delete({
         where: { id }
       }).catch((err) => {
-        console.warn(`[Supabase Webhook] User delete failed (probably already deleted):`, err.message);
+        console.warn(`[Supabase Webhook] User delete failed.`);
       });
 
       res.status(200).json({
@@ -57,7 +66,7 @@ export const supabaseWebhook = async (
       message: 'User synchronized successfully.',
     });
   } catch (error) {
-    console.error('[Supabase Webhook Error]', error);
+    console.error('[Supabase Webhook Error]');
     next(error);
   }
 };

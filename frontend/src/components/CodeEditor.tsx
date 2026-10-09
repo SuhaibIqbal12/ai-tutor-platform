@@ -1,7 +1,7 @@
 // frontend/src/components/CodeEditor.tsx
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef } from "react";
 
 interface CodeEditorProps {
   value: string;
@@ -10,16 +10,10 @@ interface CodeEditorProps {
   className?: string;
 }
 
-export default function CodeEditor({ value, onChange, language, className = "" }: CodeEditorProps) {
+export default function CodeEditor({ value, onChange, className = "" }: CodeEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
-  const [lineCount, setLineCount] = useState(1);
-
-  // Sync line numbers count
-  useEffect(() => {
-    const lines = value.split("\n").length;
-    setLineCount(lines || 1);
-  }, [value]);
+  const lineCount = Math.max(1, value.split("\n").length);
 
   // Synchronize scrolling between the textarea and line number gutter
   const handleScroll = () => {

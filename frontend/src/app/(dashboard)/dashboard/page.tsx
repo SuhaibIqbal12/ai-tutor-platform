@@ -1,9 +1,10 @@
 // frontend/src/app/(dashboard)/dashboard/page.tsx
 "use client";
+import { errorMessage } from "@/lib/contracts";
 
 import React, { useEffect, useState } from "react";
 import {
-  Sparkles, Brain, Award, BarChart3, Clock, Zap, Target, Flame,
+  Sparkles, Brain, Award, BarChart3, Zap, Target, Flame,
   BookOpen, TrendingUp, Star, Coins, ShieldCheck, AlertCircle, RefreshCw
 } from "lucide-react";
 import { apiRequest } from "@/lib/api";
@@ -44,7 +45,7 @@ function StatCard({
   accentClass = "text-indigo-500",
   iconBg = "bg-indigo-50",
 }: {
-  icon: any;
+  icon: import("lucide-react").LucideIcon;
   label: string;
   value: string | number;
   subtext?: string;
@@ -96,15 +97,15 @@ export default function DashboardPage() {
       if (res.status === "success") {
         setData(res.data);
       }
-    } catch (err: any) {
-      setError(err.message || "Failed to load dashboard statistics.");
+    } catch (err: unknown) {
+      setError(errorMessage(err) || "Failed to load dashboard statistics.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchStats();
+    void Promise.resolve().then(fetchStats);
   }, []);
 
   if (loading) {

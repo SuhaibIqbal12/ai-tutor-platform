@@ -1,15 +1,17 @@
 // frontend/src/app/(dashboard)/planner/page.tsx
 "use client";
+import type { StudyPlan } from "@/lib/contracts";
+import { errorMessage } from "@/lib/contracts";
 
 import React, { useEffect, useState } from "react";
-import { Calendar as CalendarIcon, Sparkles, Clock, CheckCircle, ShieldAlert, Award } from "lucide-react";
+import { Calendar as CalendarIcon, CheckCircle } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 
 export default function PlannerPage() {
   const [examDate, setExamDate] = useState("");
   const [dailyHours, setDailyHours] = useState("3");
   const [academicGoal, setAcademicGoal] = useState("Master current semester courses");
-  const [studyPlan, setStudyPlan] = useState<any>(null);
+  const [studyPlan, setStudyPlan] = useState<StudyPlan | null>(null);
   
   const [loading, setLoading] = useState(false);
   const [fetchingLatest, setFetchingLatest] = useState(true);
@@ -50,8 +52,8 @@ export default function PlannerPage() {
       if (res.status === "success") {
         setStudyPlan(res.data);
       }
-    } catch (err: any) {
-      alert("Failed to build roadmap schedule: " + err.message);
+    } catch (err: unknown) {
+      alert("Failed to build roadmap schedule: " + errorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -158,7 +160,7 @@ export default function PlannerPage() {
                     Daily Task Schedule Checklist:
                   </span>
                   <div className="grid grid-cols-1 gap-2">
-                    {studyPlan.dailyPlan.map((item: any, idx: number) => (
+                    {studyPlan.dailyPlan.map((item, idx: number) => (
                       <div
                         key={idx}
                         className="p-3 bg-secondary/45 border border-border rounded-xl text-xs flex justify-between items-center text-foreground/80 hover:border-indigo-500/10 transition-colors"
@@ -183,7 +185,7 @@ export default function PlannerPage() {
                     4-Week Milestones Pathway:
                   </span>
                   <div className="space-y-3">
-                    {studyPlan.weeklyPlan.map((wk: any, idx: number) => (
+                    {studyPlan.weeklyPlan.map((wk, idx: number) => (
                       <div
                         key={idx}
                         className="p-4 bg-secondary/40 border border-border rounded-xl text-xs space-y-2 hover:border-indigo-500/10 transition-colors animate-fade-in"
