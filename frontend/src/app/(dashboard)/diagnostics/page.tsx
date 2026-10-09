@@ -1,5 +1,6 @@
 // frontend/src/app/(dashboard)/diagnostics/page.tsx
 "use client";
+import type { DiagnosticLog, Health } from "@/lib/contracts";
 
 import React, { useEffect, useState } from "react";
 import { 
@@ -7,17 +8,15 @@ import {
   Cpu, 
   Database, 
   Layers, 
-  Network, 
   RefreshCw, 
   Terminal, 
-  TrendingUp, 
-  AlertCircle 
+  TrendingUp
 } from "lucide-react";
 import { getSystemHealth, getSystemLogs } from "@/lib/api";
 
 export default function DiagnosticsPage() {
-  const [health, setHealth] = useState<any>(null);
-  const [logs, setLogs] = useState<any[]>([]);
+  const [health, setHealth] = useState<Health | null>(null);
+  const [logs, setLogs] = useState<DiagnosticLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -41,7 +40,7 @@ export default function DiagnosticsPage() {
   };
 
   useEffect(() => {
-    fetchDiagnostics();
+    void Promise.resolve().then(fetchDiagnostics);
     const interval = setInterval(fetchDiagnostics, 10000);
     return () => clearInterval(interval);
   }, []);
@@ -96,8 +95,8 @@ export default function DiagnosticsPage() {
               <span className={`px-2 py-0.5 rounded font-bold border ${health.providers.gemini ? "bg-green-500/10 border-green-500/20 text-green-500" : "bg-secondary border-border text-muted-foreground"}`}>
                 Gemini
               </span>
-              <span className={`px-2 py-0.5 rounded font-bold border ${health.providers.groq ? "bg-green-500/10 border-green-500/20 text-green-500" : "bg-secondary border-border text-muted-foreground"}`}>
-                Groq
+              <span className={`px-2 py-0.5 rounded font-bold border ${health.providers.xai ? "bg-green-500/10 border-green-500/20 text-green-500" : "bg-secondary border-border text-muted-foreground"}`}>
+                xAI
               </span>
               <span className={`px-2 py-0.5 rounded font-bold border ${health.providers.openrouter ? "bg-green-500/10 border-green-500/20 text-green-500" : "bg-secondary border-border text-muted-foreground"}`}>
                 OpenRouter

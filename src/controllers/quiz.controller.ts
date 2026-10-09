@@ -1,8 +1,12 @@
+import { QuizAgent } from '../agents/quiz.agent';
+import { prisma } from '../config/prisma';
+import { AppError } from '../middleware/error.middleware';
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { QuizService } from '../services/quiz.service';
 
 const quizService = new QuizService();
+const quizAgent = new QuizAgent();
 
 /**
  * Controller endpoint to generate a new quiz.
@@ -24,8 +28,12 @@ export const generateQuiz = async (
       return;
     }
 
-    const count = questionCount ? parseInt(questionCount, 10) : 5;
-    const result = await quizService.generateQuiz(userId, topic, count);
+    if (typeof topic !== 'string' || !topic.trim() || topic.length > 200) throw new AppError('Provide a topic up to 200 characters.', 400);
+    const count = questionCount ? Number(questionCount) : 5;
+    if (!Number.isInteger(count) || count < 1 || count > 20) throw new AppError('Question count must be between 1 and 20.', 400);
+    const result = typeof req.body.isCodingTopic === 'boolean'
+      ? await quizAgent.generateQuiz(userId, topic, req.body.isCodingTopic, req.body.ragMode === true, req.body.documentId)
+      : await quizService.generateQuiz(userId, topic, count);
 
     res.status(201).json({
       status: 'success',
@@ -64,7 +72,12 @@ export const submitAttempt = async (
       return;
     }
 
-    const result = await quizService.submitQuizAttempt(userId, quizId, answers);
+    const quiz = await prisma.quiz.findFirst({ where: { id: quizId, userId } });
+    if (!quiz) throw new AppError('Quiz not found.', 404);
+    const stored = JSON.parse(quiz.questions);
+    const result = stored.some((q: any) => q.type && q.type !== 'mcq') || quiz.type === 'ADAPTIVE'
+      ? await quizAgent.submitQuizAttempt(userId, quizId, answers)
+      : await quizService.submitQuizAttempt(userId, quizId, answers);
 
     res.status(200).json({
       status: 'success',

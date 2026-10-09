@@ -60,7 +60,7 @@ class RobustGenerativeModel {
         return await inst.generateContent(prompt);
       } catch (err: any) {
         lastError = err;
-        console.warn(`[RobustModel] generateContent failed for ${model}: ${err.message || err}. Trying fallback...`);
+        console.warn(`[RobustModel] generateContent failed for ${model}: provider request failed. Trying fallback...`);
         // If it is a bad request (like schema parsing structure issues), do not retry fallback models
         if (err.status === 400 || err.message?.includes('400')) {
           throw err;
@@ -81,7 +81,7 @@ class RobustGenerativeModel {
         return await inst.generateContentStream(prompt);
       } catch (err: any) {
         lastError = err;
-        console.warn(`[RobustModel] generateContentStream failed for ${model}: ${err.message || err}. Trying fallback...`);
+        console.warn(`[RobustModel] generateContentStream failed for ${model}: provider request failed. Trying fallback...`);
         if (err.status === 400 || err.message?.includes('400')) {
           throw err;
         }
@@ -107,7 +107,7 @@ class RobustGenerativeModel {
             return await chat.sendMessage(message);
           } catch (err: any) {
             lastError = err;
-            console.warn(`[RobustModel] Chat sendMessage failed for ${model}: ${err.message || err}. Trying fallback...`);
+            console.warn(`[RobustModel] Chat sendMessage failed for ${model}: provider request failed. Trying fallback...`);
             if (err.status === 400 || err.message?.includes('400')) {
               throw err;
             }
@@ -127,7 +127,7 @@ class RobustGenerativeModel {
             return await chat.sendMessageStream(message);
           } catch (err: any) {
             lastError = err;
-            console.warn(`[RobustModel] Chat sendMessageStream failed for ${model}: ${err.message || err}. Trying fallback...`);
+            console.warn(`[RobustModel] Chat sendMessageStream failed for ${model}: provider request failed. Trying fallback...`);
             if (err.status === 400 || err.message?.includes('400')) {
               throw err;
             }

@@ -14,7 +14,7 @@ export class MemoryEngine {
       await chroma.getOrCreateCollection({ name: 'student_memory' });
       console.log('[MemoryEngine] Memory store initialized');
     } catch (error) {
-      console.error('[MemoryEngine] Error initializing memory store', error);
+      console.error('[MemoryEngine] Error initializing memory store');
     }
   }
 
@@ -41,7 +41,7 @@ export class MemoryEngine {
         const cleaned = response.response.text().replace(/```json/g, '').replace(/```/g, '');
         insights = JSON.parse(cleaned);
       } catch (e) {
-        console.warn('Failed to parse insights JSON', e);
+        console.warn('Failed to parse insights JSON');
         return;
       }
 
@@ -66,7 +66,7 @@ export class MemoryEngine {
       }
 
     } catch (error) {
-      console.error('[MemoryEngine] Failed to extract insight', error);
+      console.error('[MemoryEngine] Failed to extract insight');
     }
   }
 
@@ -87,7 +87,7 @@ export class MemoryEngine {
       }
       return [];
     } catch (error) {
-      console.error('[MemoryEngine] Failed to retrieve memory', error);
+      console.error('[MemoryEngine] Failed to retrieve memory');
       return [];
     }
   }

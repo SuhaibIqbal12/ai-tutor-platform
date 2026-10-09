@@ -1,5 +1,6 @@
 // frontend/src/app/onboarding/page.tsx
 "use client";
+import { errorMessage } from "@/lib/contracts";
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
@@ -53,22 +54,22 @@ export default function OnboardingPage() {
         window.dispatchEvent(new Event("profileUpdated"));
         router.replace("/dashboard");
       }
-    } catch (err: any) {
-      alert("Failed to submit onboarding profile: " + err.message);
+    } catch (err: unknown) {
+      alert("Failed to submit onboarding profile: " + errorMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
   // Helper to normalize subjects/interests that might return as arrays or stringified arrays
-  const profileDataTransformer = (profile: any) => {
-    const transform = (val: any): string[] => {
+  const profileDataTransformer = (profile: Record<string, unknown>) => {
+    const transform = (val: unknown): string[] => {
       if (Array.isArray(val)) return val;
       if (typeof val === "string") {
         try {
           const parsed = JSON.parse(val);
           if (Array.isArray(parsed)) return parsed;
-        } catch (e) {}
+        } catch {}
         return val.split(",").map((s) => s.trim()).filter(Boolean);
       }
       return [];

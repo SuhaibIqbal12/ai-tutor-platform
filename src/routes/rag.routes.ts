@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { uploadDocument, uploadDocumentFile, uploadDocumentUrl, getDocuments, getKnowledgeGraph, getDocumentProgress } from '../controllers/rag.controller';
+import { uploadDocument, uploadDocumentFile, uploadDocumentUrl, getDocuments, getKnowledgeGraph, getDocumentProgress, getDocumentDetails } from '../controllers/rag.controller';
 import { authMiddleware } from '../middleware/auth.middleware';
 import multer from 'multer';
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
 const router = Router();
 
 // POST /api/rag/upload (text input)
@@ -23,5 +23,7 @@ router.get('/graph', authMiddleware as any, getKnowledgeGraph);
 
 // GET /api/rag/progress/:documentId (Get document processing progress)
 router.get('/progress/:documentId', authMiddleware as any, getDocumentProgress);
+
+router.get('/documents/:documentId', authMiddleware as any, getDocumentDetails);
 
 export default router;

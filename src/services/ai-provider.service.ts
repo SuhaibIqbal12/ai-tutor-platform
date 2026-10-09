@@ -60,10 +60,7 @@ function isRetryable(err: any): boolean {
 }
 
 function logFallback(fromProvider: string, reason: string, err: any) {
-  const shortMsg = err?.message?.substring(0, 150) || String(err).substring(0, 150);
-  console.warn(`\n🔀 [AI FALLBACK] ${fromProvider} failed → switching to next provider`);
-  console.warn(`   Reason: ${reason}`);
-  console.warn(`   Error : ${shortMsg}\n`);
+  console.warn(`[AI] ${fromProvider} failed (${err.status || err.response?.status || 'network/provider error'}); trying the next configured provider.`);
 }
 
 export class AIProviderService {
@@ -85,10 +82,10 @@ export class AIProviderService {
     const ollama = !!process.env.OLLAMA_BASE_URL;
 
     console.log('\n=== AI PROVIDER STARTUP REPORT ===');
-    console.log(`Google Gemini (Primary):    ${gemini ? '✓ Connected' : '✗ MISSING'}`);
-    console.log(`Grok / xAI (Fallback 1):   ${xai ? '✓ Connected' : '✗ MISSING'}`);
-    console.log(`OpenRouter (Fallback 2):    ${openrouter ? '✓ Connected' : '✗ MISSING'}`);
-    console.log(`OpenAI (Fallback 3):        ${openai ? '✓ Connected' : '✗ MISSING'}`);
+    console.log(`Google Gemini (Primary):    ${gemini ? '✓ Configured' : '✗ MISSING'}`);
+    console.log(`Grok / xAI (Fallback 1):   ${xai ? '✓ Configured' : '✗ MISSING'}`);
+    console.log(`OpenRouter (Fallback 2):    ${openrouter ? '✓ Configured' : '✗ MISSING'}`);
+    console.log(`OpenAI (Fallback 3):        ${openai ? '✓ Configured' : '✗ MISSING'}`);
     console.log(`Ollama (Local Fallback):    ${ollama ? '✓ Configured' : '✗ MISSING'}`);
     console.log('===================================\n');
 
@@ -184,7 +181,7 @@ export class AIProviderService {
         const retryable = isRetryable(err);
 
         if (retryable && attempt < retries) {
-          console.warn(`[${providerName}] Attempt ${attempt}/${retries} failed (transient): ${err.message?.substring(0, 100)}. Retrying in ${currentDelay}ms...`);
+          console.warn(`[${providerName}] Attempt ${attempt}/${retries} failed (transient): ${'provider request failed'}. Retrying in ${currentDelay}ms...`);
           await new Promise(resolve => setTimeout(resolve, currentDelay));
           currentDelay = Math.min(currentDelay * 2, 10000);
         } else {
@@ -236,10 +233,10 @@ export class AIProviderService {
         }
       }
 
-      // Ollama: always attempt, but catch connection errors gracefully
-      if (isStream) {
+      // Local fallback is opt-in; never contact an unconfigured host.
+      if (process.env.OLLAMA_BASE_URL && isStream) {
         providers.push({ name: 'OLLAMA', execute: () => this.retryOperation(() => this.generateStreamWithOllama(typeof prompt === 'string' ? prompt : JSON.stringify(prompt), options), 'OLLAMA', 1) });
-      } else {
+      } else if (process.env.OLLAMA_BASE_URL) {
         providers.push({ name: 'OLLAMA', execute: () => this.retryOperation(() => this.generateWithOllama(typeof prompt === 'string' ? prompt : JSON.stringify(prompt), options), 'OLLAMA', 1) });
       }
     }
@@ -282,10 +279,10 @@ export class AIProviderService {
       }
     }
 
-    // Ollama: always attempt, single try
-    if (isStream) {
+    // Local fallback is opt-in.
+    if (process.env.OLLAMA_BASE_URL && isStream) {
       providers.push({ name: 'OLLAMA', execute: () => this.retryOperation(() => this.generateChatStreamWithOllama(messages, options), 'OLLAMA', 1) });
-    } else {
+    } else if (process.env.OLLAMA_BASE_URL) {
       providers.push({ name: 'OLLAMA', execute: () => this.retryOperation(() => this.generateChatWithOllama(messages, options), 'OLLAMA', 1) });
     }
 
@@ -301,7 +298,7 @@ export class AIProviderService {
     const providers = this.buildProviders(isMultimodal, false, prompt, options);
 
     if (providers.length === 0) {
-      return 'AI Tutor configuration error: No AI providers configured. Please set at least GEMINI_API_KEY in your .env file.';
+      throw new AppError('No AI provider is configured.', 503);
     }
 
     let lastError: any;
@@ -317,24 +314,19 @@ export class AIProviderService {
         return result;
       } catch (err: any) {
         lastError = err;
-        const reason = isQuotaError(err) ? 'Quota/rate limit exceeded' : isInvalidKeyError(err) ? 'Invalid API key' : err.message?.substring(0, 100) || 'Unknown error';
+        const reason = isQuotaError(err) ? 'Quota/rate limit exceeded' : isInvalidKeyError(err) ? 'Invalid API key' : 'provider request failed';
         logFallback(provider.name, reason, err);
       }
     }
 
-    throw new AppError(`All AI providers failed. Last error: ${lastError?.message || lastError}`, 502);
+    throw new AppError('AI providers are unavailable. Check model access and quota.', 502);
   }
 
   private async generateStreamWithFallback(prompt: string | any[], options: AIProviderOptions): Promise<AsyncGenerator<string, void, unknown>> {
     const isMultimodal = Array.isArray(prompt) && prompt.some((p: any) => typeof p === 'object' && p.inlineData);
     const providers = this.buildProviders(isMultimodal, true, prompt, options);
 
-    if (providers.length === 0) {
-      async function* noProviders() {
-        yield 'AI Tutor error: No AI providers are configured. Please set GEMINI_API_KEY or another provider key in your .env file.';
-      }
-      return noProviders();
-    }
+    if (providers.length === 0) throw new AppError('No AI provider is configured.', 503);
 
     let lastError: any;
     for (const provider of providers) {
@@ -349,24 +341,19 @@ export class AIProviderService {
         return result;
       } catch (err: any) {
         lastError = err;
-        const reason = isQuotaError(err) ? 'Quota/rate limit exceeded' : isInvalidKeyError(err) ? 'Invalid API key' : err.message?.substring(0, 100) || 'Unknown error';
+        const reason = isQuotaError(err) ? 'Quota/rate limit exceeded' : isInvalidKeyError(err) ? 'Invalid API key' : 'provider request failed';
         logFallback(provider.name, reason, err);
       }
     }
 
-    // Return an error stream instead of throwing — prevents UI from hanging forever
-    const errMsg = lastError?.message || String(lastError);
-    async function* errorStream() {
-      yield `⚠️ All AI providers failed. Please check your API keys and quota limits.\n\nLast error: ${errMsg.substring(0, 300)}`;
-    }
-    return errorStream();
+    throw new AppError('AI providers are unavailable. Check model access and quota.', 502);
   }
 
   private async generateChatCompletionWithFallback(messages: any[], options: AIProviderOptions): Promise<string> {
     const providers = this.buildChatProviders(false, messages, options);
 
     if (providers.length === 0) {
-      return 'AI Tutor configuration error: No AI providers configured.';
+      throw new AppError('No AI provider is configured.', 503);
     }
 
     let lastError: any;
@@ -382,12 +369,12 @@ export class AIProviderService {
         return result;
       } catch (err: any) {
         lastError = err;
-        const reason = isQuotaError(err) ? 'Quota/rate limit exceeded' : isInvalidKeyError(err) ? 'Invalid API key' : err.message?.substring(0, 100) || 'Unknown error';
+        const reason = isQuotaError(err) ? 'Quota/rate limit exceeded' : isInvalidKeyError(err) ? 'Invalid API key' : 'provider request failed';
         logFallback(provider.name, reason, err);
       }
     }
 
-    throw new AppError(`All AI chat providers failed. Last error: ${lastError?.message || lastError}`, 502);
+    throw new AppError('AI providers are unavailable. Check model access and quota.', 502);
   }
 
   private async generateChatStreamWithFallback(messages: any[], options: AIProviderOptions): Promise<AsyncGenerator<string, void, unknown>> {
@@ -395,7 +382,7 @@ export class AIProviderService {
 
     if (providers.length === 0) {
       async function* noProviders() {
-        yield 'AI Tutor error: No AI providers are configured.';
+        throw new AppError('No AI provider is configured.', 503);
       }
       return noProviders();
     }
@@ -413,13 +400,13 @@ export class AIProviderService {
         return result;
       } catch (err: any) {
         lastError = err;
-        const reason = isQuotaError(err) ? 'Quota/rate limit exceeded' : isInvalidKeyError(err) ? 'Invalid API key' : err.message?.substring(0, 100) || 'Unknown error';
+        const reason = isQuotaError(err) ? 'Quota/rate limit exceeded' : isInvalidKeyError(err) ? 'Invalid API key' : 'provider request failed';
         logFallback(provider.name, reason, err);
       }
     }
 
     // Return an error stream — prevents UI from hanging forever
-    const errMsg = lastError?.message || String(lastError);
+    const errMsg = 'Provider unavailable. Check configured model access and quota.';
     async function* errorStream() {
       yield `⚠️ All AI providers failed. Please check your API keys.\n\nLast error: ${errMsg.substring(0, 300)}`;
     }

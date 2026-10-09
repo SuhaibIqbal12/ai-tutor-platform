@@ -65,7 +65,7 @@ Use clear, clean academic formatting. Avoid markdown headings that are too deep.
       const result = await model.generateContent(prompt);
       return result.response.text();
     } catch (err: any) {
-      console.error('Revision Agent Plan Generation Error:', err);
+      console.error('Revision Agent Plan Generation Error:');
       return `### Revision Recommendations\n- Focus on reviewing your identified weak topics: **${heatmap.categories.weak.join(', ') || 'None'}**\n- Keep practicing quizzes to build up your heatmap score!`;
     }
   }

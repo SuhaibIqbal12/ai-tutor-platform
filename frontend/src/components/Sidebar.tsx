@@ -13,8 +13,6 @@ import {
   Briefcase,
   ChevronLeft,
   ChevronRight,
-  Settings,
-  Sparkles,
   X,
   Calendar,
   Activity

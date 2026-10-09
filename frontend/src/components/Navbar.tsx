@@ -1,5 +1,6 @@
 // frontend/src/components/Navbar.tsx
 "use client";
+import type { Health } from "@/lib/contracts";
 
 import React, { useEffect, useState } from "react";
 import { GraduationCap, LogOut, Menu, User } from "lucide-react";
@@ -16,10 +17,11 @@ export default function Navbar({ onMenuToggle }: NavbarProps) {
   const [academicYear, setAcademicYear] = useState("");
   const [cgpa, setCgpa] = useState<number | null>(null);
   
-  const [health, setHealth] = useState<any>(null);
+  const [health, setHealth] = useState<Health | null>(null);
   const [showHealthCard, setShowHealthCard] = useState(false);
 
   useEffect(() => {
+    const initTimer = setTimeout(() => {
     // Read from localStorage to avoid hydration mismatch
     setEmail(getStoredEmail());
     try {
@@ -30,9 +32,11 @@ export default function Navbar({ onMenuToggle }: NavbarProps) {
         setAcademicYear(parsed.academicYear || "");
         setCgpa(parsed.cgpa || null);
       }
-    } catch (e) {
-      console.error("Failed to parse stored profile", e);
+    } catch {
+      console.error("Failed to parse stored profile");
     }
+
+    }, 0);
 
     // Custom event listener in case profile updates during onboarding
     const handleProfileUpdate = () => {
@@ -44,7 +48,7 @@ export default function Navbar({ onMenuToggle }: NavbarProps) {
           setAcademicYear(parsed.academicYear || "");
           setCgpa(parsed.cgpa || null);
         }
-      } catch (e) {}
+      } catch {}
     };
 
     window.addEventListener("profileUpdated", handleProfileUpdate);
@@ -56,14 +60,15 @@ export default function Navbar({ onMenuToggle }: NavbarProps) {
         if (res && res.status === "success") {
           setHealth(res.data);
         }
-      } catch (e) {
-        console.error("Health check failed", e);
+      } catch {
+        console.error("Health check failed");
       }
     };
     fetchHealth();
     const interval = setInterval(fetchHealth, 15000);
 
     return () => {
+      clearTimeout(initTimer);
       window.removeEventListener("profileUpdated", handleProfileUpdate);
       clearInterval(interval);
     };
@@ -122,9 +127,9 @@ export default function Navbar({ onMenuToggle }: NavbarProps) {
               className="flex items-center gap-1.5 px-2.5 py-1.5 border border-border rounded-lg bg-secondary hover:bg-secondary/80 text-[11px] font-bold text-foreground cursor-pointer transition-all duration-150 shadow-sm"
             >
               <span className={`h-2 w-2 rounded-full ${
-                health.database === "Disconnected" || health.redis === "Disconnected" || (!health.providers.gemini && !health.providers.groq && !health.providers.openrouter)
+                health.database === "Disconnected" || health.redis === "Disconnected" || !Object.values(health.providers).some(Boolean)
                   ? "bg-red-500 animate-pulse"
-                  : !health.providers.gemini || !health.providers.groq || !health.providers.openrouter
+                  : !Object.values(health.providers).every(Boolean)
                     ? "bg-yellow-500"
                     : "bg-green-500"
               }`} />
@@ -154,9 +159,9 @@ export default function Navbar({ onMenuToggle }: NavbarProps) {
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Groq API Key:</span>
-                    <span className={`font-semibold ${health.providers.groq ? "text-green-500" : "text-yellow-500"}`}>
-                      {health.providers.groq ? "Configured" : "Missing"}
+                    <span className="text-muted-foreground">xAI API Key:</span>
+                    <span className={`font-semibold ${health.providers.xai ? "text-green-500" : "text-yellow-500"}`}>
+                      {health.providers.xai ? "Configured" : "Missing"}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -173,14 +178,14 @@ export default function Navbar({ onMenuToggle }: NavbarProps) {
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">Embeddings Layer:</span>
-                    <span className={`font-semibold ${health.database === "Connected" && health.providers.gemini ? "text-green-500" : "text-yellow-500"}`}>
-                      {health.database === "Connected" && health.providers.gemini ? "Working" : "Degraded"}
+                    <span className={`font-semibold ${health.database === "Connected" ? "text-green-500" : "text-yellow-500"}`}>
+                      {health.database === "Connected" ? "Local model; not probed" : "Unavailable"}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-muted-foreground">RAG Retrieval:</span>
                     <span className={`font-semibold ${health.database === "Connected" ? "text-green-500" : "text-yellow-500"}`}>
-                      {health.database === "Connected" ? "Working" : "Unavailable"}
+                      {health.database === "Connected" ? "Database reachable" : "Unavailable"}
                     </span>
                   </div>
                   <div className="flex justify-between items-center border-t border-border/40 pt-2 text-[10px] text-muted-foreground">

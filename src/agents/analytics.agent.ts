@@ -72,7 +72,7 @@ Provide a 3-sentence summary highlighting:
         const result = await aiClient.generateContent(prompt);
         feedbackSummary = result.response.text();
       } catch (err) {
-        console.error('Analytics Agent Summary Error:', err);
+        console.error('Analytics Agent Summary Error:');
         feedbackSummary = 'Great progress! Continue taking quizzes and reviewing your heatmap to optimize your study paths.';
       }
     }

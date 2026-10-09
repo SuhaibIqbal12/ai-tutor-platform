@@ -1,5 +1,6 @@
 import { genAI, GEMINI_MODEL } from '../config/gemini';
-import { RagService } from '../services/rag.service';
+import { RagService, NO_EVIDENCE } from '../services/rag.service';
+import { GROUNDING_INSTRUCTION, withVerifiedReferences } from '../rag/grounding';
 
 export class TeachingAgent {
   private ragService = new RagService();
@@ -29,9 +30,9 @@ export class TeachingAgent {
 
     // Retrieve RAG context if enabled
     let context = '';
-    if (ragMode) {
-      context = await this.ragService.searchSimilarChunks(userId, question);
-    }
+    const evidence = ragMode ? await this.ragService.retrieve(userId, question) : undefined;
+    if (evidence && !evidence.sources.length) return NO_EVIDENCE;
+    if (evidence) context = evidence.context;
 
     const baseInstructions = `You are a patient, highly-skilled, and clear AI Teaching Agent. Your mission is to help students master educational topics.
 
@@ -93,7 +94,7 @@ ADAPTATION GUIDELINE:
     };
 
     const modifier = subjectModifiers[subject] || subjectModifiers.General;
-    const systemInstruction = `${baseInstructions}\n\nSubject Context Modifier: ${modifier}`;
+    const systemInstruction = `${baseInstructions}\n\nSubject Context Modifier: ${modifier}` + (ragMode ? `\n${GROUNDING_INSTRUCTION}` : '');
 
     const model = genAI.getGenerativeModel({
       model: GEMINI_MODEL,
@@ -121,6 +122,6 @@ Question: ${question}`;
       responseText = result.response.text();
     }
 
-    return responseText;
+    return evidence ? withVerifiedReferences(responseText, evidence.sources) : responseText;
   }
 }

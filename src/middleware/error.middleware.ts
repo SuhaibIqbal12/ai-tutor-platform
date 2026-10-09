@@ -26,21 +26,11 @@ export const errorHandler = (
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   next: NextFunction
 ): void => {
-  const statusCode = err instanceof AppError ? err.statusCode : 500;
-  const message = err.message || 'Internal Server Error';
-
-  // Log the error stack in development or for critical server errors (500)
-  console.error(`[API Error] ${statusCode} - ${message}`);
-  if (statusCode === 500) {
-    console.error(err.stack);
-  }
-
-  res.status(statusCode).json({
-    status: 'error',
-    statusCode,
-    message: statusCode === 500 && process.env.NODE_ENV === 'production'
-      ? 'An unexpected error occurred'
-      : message,
-    ...(process.env.NODE_ENV !== 'production' && { stack: err.stack }),
-  });
+  const multer = err as Error & { code?: string };
+  const statusCode = multer.code === 'LIMIT_FILE_SIZE' ? 413 : err instanceof AppError ? err.statusCode : 500;
+  const message = multer.code === 'LIMIT_FILE_SIZE' ? 'File is too large. Maximum size is 10 MB.' :
+    statusCode >= 500 ? 'Service unavailable. Please retry; if this continues, check the application configuration and diagnostics.' : err.message;
+  // Raw SDK/database errors can contain connection URLs, keys, or student text.
+  console.error(`[API] Request failed with status ${statusCode}`);
+  res.status(statusCode).json({ status: 'error', statusCode, message });
 };

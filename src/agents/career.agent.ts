@@ -99,7 +99,7 @@ If their Coding Growth Score is high, suggest advanced technical projects or com
       text = text.replace(/```json/g, '').replace(/```/g, '').trim();
       return JSON.parse(text);
     } catch (err: any) {
-      console.error('Career Agent Plan Generation Error:', err);
+      console.error('Career Agent Plan Generation Error:');
       throw new AppError(`Failed to generate career path: ${err.message || err}`, 502);
     }
   }

@@ -8,7 +8,7 @@ import {
   BookOpen, Code2, Calculator, Globe, Cpu, Database, Shield, Layers,
   Network, Server, Terminal, Binary, Braces, FileCode2, MonitorSmartphone, Atom, GitBranch
 } from "lucide-react";
-import { setupStreamingTutor, Message } from "@/lib/api";
+import { setupStreamingTutor, apiRequest, DocumentSource, Message } from "@/lib/api";
 import { formatExplanations } from "@/components/CollapsiblePanel";
 
 const SUBJECTS = [
@@ -48,6 +48,9 @@ export default function TutorPage() {
   const [subject, setSubject] = useState("General");
   const [ragEnabled, setRagEnabled] = useState(false);
   const [conversationId, setConversationId] = useState("");
+  const [documentId, setDocumentId] = useState("");
+  const [readySources, setReadySources] = useState<DocumentSource[]>([]);
+  useEffect(() => { apiRequest("/api/rag/documents").then(result => setReadySources(result.data.documents.filter((doc: DocumentSource) => doc.status === "READY"))).catch(() => {}); }, []);
   const [streaming, setStreaming] = useState(false);
   const [showSubjectPicker, setShowSubjectPicker] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -91,6 +94,7 @@ export default function TutorPage() {
       conversationId,
       ragMode: ragEnabled,
       subject,
+      documentId: documentId || undefined,
       onMeta: (meta) => { setConversationId(meta.conversationId); },
       onContent: (text) => {
         receivedText += text;
@@ -323,7 +327,13 @@ export default function TutorPage() {
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="flex gap-2.5">
+        {ragEnabled && <label className="block text-xs mb-2">Document evidence
+            <select value={documentId} onChange={event => setDocumentId(event.target.value)} className="ml-2 rounded border border-border bg-background p-2">
+              <option value="">All ready materials</option>
+              {readySources.map(source => <option key={source.id} value={source.id}>{source.title}</option>)}
+            </select>
+          </label>}
+          <form onSubmit={handleSubmit} className="flex gap-2.5">
           <input
             ref={inputRef}
             type="text"

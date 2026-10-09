@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma';
-import { redisClient } from '../config/redis';
+import { redisClient, redisConfigured } from '../config/redis';
 
 export interface LogEntry {
   timestamp: string;
@@ -29,13 +29,31 @@ class DiagnosticsService {
     this.lastLatency = ms;
   }
 
-  public getLogs() {
-    return this.logs;
+  public getLogs(userId: string) {
+    return this.logs.filter(log => log.details?.userId === userId);
   }
 
-  public async getHealthStats() {
+  public async getReadiness() {
+    let database = false; let redis = false; let workers = 0;
+    try { await prisma.$queryRaw`SELECT 1`; database = true; } catch { /* Connectivity only. */ }
+    try { redis = redisConfigured && await redisClient.ping() === 'PONG'; } catch { /* Connectivity only. */ }
+    if (redis) {
+      try { const { ragQueue } = await import('../queues/rag.queue'); workers = await ragQueue?.getWorkersCount() || 0; } catch { /* Worker unavailable. */ }
+    }
+    const configuredProviders = ['GEMINI_API_KEY','XAI_API_KEY','OPENROUTER_API_KEY','OPENAI_API_KEY','OLLAMA_BASE_URL']
+      .filter(key => process.env[key] && !process.env[key]!.startsWith('your_'));
+    const authConfigured = !!process.env.JWT_SECRET && process.env.JWT_SECRET.length >= 32 && !process.env.JWT_SECRET.startsWith('your_');
+    return { ready: database && redis && workers > 0 && authConfigured && configuredProviders.length > 0,
+      database: database ? 'Connected' : 'Disconnected', redis: redis ? 'Connected' : 'Disconnected',
+      authConfigured, configuredProviders, providerConnectivity: 'Not probed',
+      workers, worker: workers > 0 ? 'Connected' : 'Unavailable: run npm run worker on a persistent host.' };
+  }
+
+  public async getHealthStats(userId: string) {
     const gemini = !!process.env.GEMINI_API_KEY;
-    const groq = !!process.env.GROQ_API_KEY;
+    const xai = !!process.env.XAI_API_KEY;
+    const openai = !!process.env.OPENAI_API_KEY;
+    const ollama = !!process.env.OLLAMA_BASE_URL;
     const openrouter = !!process.env.OPENROUTER_API_KEY;
 
     let dbConnected = false;
@@ -44,11 +62,11 @@ class DiagnosticsService {
     let nodeCount = 0;
 
     try {
-      documentCount = await prisma.document.count();
-      chunkCount = await prisma.documentChunk.count();
+      documentCount = await prisma.document.count({ where: { userId } });
+      chunkCount = await prisma.documentChunk.count({ where: { document: { userId } } });
       
       const docs = await prisma.document.findMany({
-        select: { knowledgeGraph: true }
+        where: { userId }, select: { knowledgeGraph: true }
       });
       for (const doc of docs) {
         if (doc.knowledgeGraph) {
@@ -60,17 +78,17 @@ class DiagnosticsService {
       }
       dbConnected = true;
     } catch (err) {
-      console.error('Database connection failed in diagnostics:', err);
+      console.error('Database connection failed in diagnostics:');
     }
 
     let redisConnected = false;
     try {
-      const ping = await redisClient.ping();
+      const ping = redisConfigured ? await redisClient.ping() : '';
       redisConnected = ping === 'PONG';
     } catch {}
 
-    const providers = { gemini, groq, openrouter };
-    const currentProvider = gemini ? 'Google Gemini' : groq ? 'Groq' : openrouter ? 'OpenRouter' : 'None';
+    const providers = { gemini, xai, openrouter, openai, ollama };
+    const currentProvider = gemini ? 'Google Gemini (configured)' : xai ? 'xAI (configured)' : openrouter ? 'OpenRouter (configured)' : openai ? 'OpenAI (configured)' : ollama ? 'Ollama (configured)' : 'None';
 
     return {
       providers,
@@ -81,9 +99,9 @@ class DiagnosticsService {
       chunkCount,
       nodeCount,
       latency: this.lastLatency,
-      lastRetrievalLog: this.logs.find(l => l.type === 'retrieval') || null,
-      lastIngestionLog: this.logs.find(l => l.type === 'ingestion') || null,
-      lastAiRequestLog: this.logs.find(l => l.type === 'ai_request') || null,
+      lastRetrievalLog: this.getLogs(userId).find(l => l.type === 'retrieval') || null,
+      lastIngestionLog: this.getLogs(userId).find(l => l.type === 'ingestion') || null,
+      lastAiRequestLog: this.getLogs(userId).find(l => l.type === 'ai_request') || null,
     };
   }
 }

@@ -1,5 +1,7 @@
 // frontend/src/app/(dashboard)/sources/page.tsx
 "use client";
+import type { GraphEdge, DocumentProgress, GraphNode } from "@/lib/contracts";
+import { errorMessage } from "@/lib/contracts";
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -10,30 +12,32 @@ import {
   AlignLeft,
   CheckCircle,
   Compass,
-  MessageSquare,
-  ShieldAlert
+  MessageSquare
 } from "lucide-react";
 import { apiRequest, DocumentSource } from "@/lib/api";
 
 export default function SourcesPage() {
   const router = useRouter();
   const [sources, setSources] = useState<DocumentSource[]>([]);
-  const [graphData, setGraphData] = useState<{ nodes: any[]; edges: any[] }>({ nodes: [], edges: [] });
-  const [selectedNode, setSelectedNode] = useState<any | null>(null);
+  const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   
   // Forms loading/success states
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
-  const [activeTab, setActiveTab] = useState<"file" | "text">("file");
+  const [activeTab, setActiveTab] = useState<"file" | "text" | "url">("file");
 
   // Ingestion states
   const [textTitle, setTextTitle] = useState("");
   const [textContent, setTextContent] = useState("");
+  const [sourceUrl, setSourceUrl] = useState("");
+  const [sourceError, setSourceError] = useState("");
+  const [documentDetails, setDocumentDetails] = useState<{ title: string; flashcards: { front: string; back: string }[]; mindMap: string | null } | null>(null);
   const [file, setFile] = useState<File | null>(null);
 
 
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [jobProgress, setJobProgress] = useState<any>(null);
+  const [jobProgress, setJobProgress] = useState<DocumentProgress | null>(null);
 
   const fetchData = async () => {
     try {
@@ -47,26 +51,36 @@ export default function SourcesPage() {
         setGraphData(graphRes.data || { nodes: [], edges: [] });
       }
     } catch (err) {
-      console.error("Failed to load sources or graph:", err);
+      setSourceError(err instanceof Error ? errorMessage(err) : "Unable to load materials.");
     }
   };
 
   useEffect(() => {
-    fetchData();
+    void Promise.resolve().then(fetchData);
   }, []);
 
   useEffect(() => {
     if (!activeJobId) return;
 
     let timer: NodeJS.Timeout;
+    let cancelled = false;
+    let failures = 0;
+    const startedAt = Date.now();
     const checkProgress = async () => {
+      if (cancelled) return;
+      if (Date.now() - startedAt > 10 * 60 * 1000) {
+        setSourceError("Processing is taking longer than expected. Check the document status later; a worker may be unavailable.");
+        setActiveJobId(null); return;
+      }
       try {
         const res = await apiRequest(`/api/rag/progress/${activeJobId}`);
+        if (cancelled) return;
+        failures = 0;
         if (res.status === "success") {
           const progress = res.data;
           setJobProgress(progress);
           if (progress.status === "completed") {
-            setSuccessMsg("Document processing completed successfully!");
+            setSuccessMsg(progress.warnings?.length ? "Material is ready for questions. Optional study aids are unavailable." : "Material is ready for questions.");
             setTimeout(() => setSuccessMsg(""), 5000);
             fetchData();
             setActiveJobId(null);
@@ -76,17 +90,19 @@ export default function SourcesPage() {
             setActiveJobId(null);
             setJobProgress(null);
           } else {
-            timer = setTimeout(checkProgress, 1500);
+            timer = setTimeout(checkProgress, 10000);
           }
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Error checking progress:", err);
-        timer = setTimeout(checkProgress, 1500);
+        failures++;
+        if (failures >= 3) { setSourceError("Cannot check processing status. Refresh to try again."); setActiveJobId(null); return; }
+        timer = setTimeout(checkProgress, 10000);
       }
     };
 
     checkProgress();
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [activeJobId]);
 
   const handleIngestText = async (e: React.FormEvent) => {
@@ -106,8 +122,8 @@ export default function SourcesPage() {
         setTimeout(() => setSuccessMsg(""), 5000);
         fetchData();
       }
-    } catch (err: any) {
-      alert("Failed to ingest notes: " + err.message);
+    } catch (err: unknown) {
+      alert("Failed to ingest notes: " + errorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -116,6 +132,7 @@ export default function SourcesPage() {
   const handleIngestFile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file || loading) return;
+    if (file.size > 10 * 1024 * 1024) { setSourceError("Maximum file size is 10 MB."); return; }
 
     setLoading(true);
     const token = localStorage.getItem("token") || "";
@@ -138,7 +155,7 @@ export default function SourcesPage() {
 
       // Safely parse — server may return plain text on crash
       const text = await res.text();
-      let data: any;
+      let data: { status: string; message?: string; data?: { documentId: string; title: string } };
       try {
         data = JSON.parse(text);
       } catch {
@@ -158,12 +175,12 @@ export default function SourcesPage() {
         setTimeout(() => setSuccessMsg(""), 5000);
         fetchData();
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       clearTimeout(timeoutId);
-      if (err.name === "AbortError") {
+      if (err instanceof Error && err.name === "AbortError") {
         alert("File upload timed out. The file may be too large or the server is busy. Please try again.");
       } else {
-        alert("File upload issue: " + err.message);
+        alert("File upload issue: " + errorMessage(err));
       }
     } finally {
       setLoading(false);
@@ -172,6 +189,15 @@ export default function SourcesPage() {
 
 
 
+
+  const handleIngestUrl = async (e: React.FormEvent) => {
+    e.preventDefault(); setLoading(true); setSourceError("");
+    try {
+      const result = await apiRequest("/api/rag/upload-url", "POST", { url: sourceUrl });
+      setActiveJobId(result.data.documentId); setJobProgress({ stage: result.data.stage }); setSourceUrl("");
+    } catch (error: unknown) { setSourceError(error instanceof Error ? error.message : "URL upload failed."); }
+    finally { setLoading(false); }
+  };
 
   // Precompute layout node positions for the dependency graph
   const positions: Record<string, { x: number; y: number }> = {};
@@ -337,11 +363,12 @@ export default function SourcesPage() {
             <form onSubmit={handleIngestFile} className="space-y-4">
               <div className="border-2 border-dashed border-border hover:border-indigo-500/50 rounded-xl p-8 flex flex-col items-center justify-center bg-secondary/20 transition-all cursor-pointer relative">
                 <UploadCloud className="h-10 w-10 text-muted-foreground/60" />
-                <span className="text-xs font-bold text-foreground mt-3">Drag & Drop Documents</span>
+                <span className="text-xs font-bold text-foreground mt-3">Select a document</span>
                 <span className="text-[10px] text-muted-foreground mt-1">PDF, DOCX, PPTX, JPG, TXT up to 10MB</span>
                 <input
                   type="file"
                   required
+                  accept=".pdf,.txt,.md,.docx,.pptx,.xlsx,.odt,.png,.jpg,.jpeg,.webp"
                   onChange={(e) => setFile(e.target.files?.[0] || null)}
                   className="mt-4 block w-full text-xs text-muted-foreground file:mr-4 file:py-1.5 file:px-3.5 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-slate-900 file:text-white dark:file:bg-foreground dark:file:text-background file:cursor-pointer hover:file:opacity-90"
                 />
@@ -351,10 +378,23 @@ export default function SourcesPage() {
                 disabled={loading || !file}
                 className="w-full py-2 bg-slate-950 hover:bg-slate-900 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-950 rounded-xl text-xs font-bold transition-colors cursor-pointer shadow disabled:opacity-50"
               >
-                {loading ? "Vectorizing chunk layers..." : "Ingest Base Document"}
+                {loading ? "Uploading..." : "Upload material"}
               </button>
             </form>
           )}
+
+          <form onSubmit={handleIngestUrl} className="space-y-3 border-t border-border pt-4">
+            <label htmlFor="source-url" className="text-sm font-semibold">Webpage or YouTube video</label>
+            <input id="source-url" type="url" required value={sourceUrl} onChange={e => setSourceUrl(e.target.value)} placeholder="https://..." className="w-full p-3 rounded-xl border border-border bg-background" />
+            <button disabled={loading} className="px-4 py-2 rounded-xl bg-indigo-600 text-white">{loading ? "Uploading..." : "Add link"}</button>
+          </form>
+          {sourceError && <p role="alert" className="text-sm text-red-500">{sourceError}</p>}
+          {documentDetails && <section className="space-y-3 border-t border-border pt-4">
+            <h3 className="font-semibold">Study aids: {documentDetails.title}</h3>
+            {!documentDetails.flashcards.length && <p className="text-sm">Study aids are unavailable for this material.</p>}
+            {documentDetails.flashcards.map((card, i) => <details key={i} className="rounded-xl border border-border p-3"><summary>{card.front}</summary><p className="pt-2 text-sm">{card.back}</p></details>)}
+            {documentDetails.mindMap && <details><summary>Mind-map diagram source</summary><pre className="text-xs overflow-auto whitespace-pre-wrap">{documentDetails.mindMap}</pre></details>}
+          </section>}
 
           {/* Form 2: Raw Text */}
           {activeTab === "text" && (
@@ -402,7 +442,7 @@ export default function SourcesPage() {
         <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-4 h-fit max-h-[380px] overflow-y-auto">
           <h3 className="text-xs font-bold text-foreground uppercase tracking-wider border-b border-border pb-2 flex items-center gap-1.5">
             <FileText className="h-4.5 w-4.5 text-indigo-400" />
-            Vector Sources ({sources.length})
+            Your materials ({sources.length})
           </h3>
           {sources.length === 0 ? (
             <div className="text-xs text-muted-foreground italic py-10 text-center">
@@ -416,12 +456,18 @@ export default function SourcesPage() {
                   className="p-3 bg-secondary/40 border border-border rounded-xl flex flex-col gap-1 text-[11px] text-foreground/80 hover:border-indigo-500/20 hover:bg-secondary/60 transition-colors"
                 >
                   <span className="font-bold text-foreground truncate">{src.title}</span>
+                  {src.error && <p className="text-red-500">{src.error}</p>}
+                  {src.status === "READY" && <button className="text-left text-indigo-500" onClick={async () => {
+                    try { const result = await apiRequest(`/api/rag/documents/${src.id}`); setDocumentDetails(result.data); }
+                    catch (error: unknown) { setSourceError(error instanceof Error ? error.message : "Unable to load study aids."); }
+                  }}>View study aids</button>}
+                  {!["READY", "FAILED", "NEEDS_REINDEX"].includes(src.status) && <button onClick={() => { setActiveJobId(src.id); setJobProgress({ stage: src.status }); }}>Check progress</button>}
                   <span className="text-[9px] text-muted-foreground font-mono">
-                    Ingested: {new Date(src.createdAt).toLocaleDateString()}
+                    Uploaded: {new Date(src.createdAt).toLocaleDateString()}
                   </span>
                   <div className="flex items-center gap-1 mt-1 font-bold text-emerald-500 text-[9px] uppercase tracking-wide">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                    Index Ready
+                    {src.status === "READY" ? "Ready for questions" : src.status.replaceAll("_", " ")}
                   </div>
                 </li>
               ))}

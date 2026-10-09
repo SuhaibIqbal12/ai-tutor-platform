@@ -22,6 +22,9 @@ export interface DocumentSource {
   id: string;
   title: string;
   createdAt: string;
+  status: string;
+  error?: string | null;
+  warnings?: string;
 }
 
 export interface Message {
@@ -78,10 +81,12 @@ export function clearStoredAuth() {
   if (typeof window !== "undefined") {
     localStorage.removeItem("token");
     localStorage.removeItem("email");
+    localStorage.removeItem("profile");
+    import("./supabase").then(({ supabase }) => supabase?.auth.signOut());
   }
 }
 
-export async function apiRequest(endpoint: string, method = "GET", body: any = null) {
+export async function apiRequest(endpoint: string, method = "GET", body: unknown = null) {
   const token = getStoredToken();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   
@@ -100,7 +105,7 @@ export async function apiRequest(endpoint: string, method = "GET", body: any = n
   let data;
   try {
     data = JSON.parse(text);
-  } catch (e) {
+  } catch {
     if (!res.ok) {
       throw new Error(`API Error (${res.status}): ${text}`);
     }
@@ -114,64 +119,51 @@ export async function apiRequest(endpoint: string, method = "GET", body: any = n
         window.location.href = "/login";
       }
     }
-    throw new Error(data.message || "Request failed");
+    throw new Error(data.message || data.error || "Request failed");
   }
   return data;
 }
 
-export function setupStreamingTutor({
-  question,
-  conversationId,
-  ragMode,
-  subject,
-  onMeta,
-  onContent,
-  onError,
-  onDone,
-}: {
-  question: string;
-  conversationId: string;
-  ragMode: boolean;
-  subject: string;
+export function setupStreamingTutor({ question, conversationId, ragMode, subject, documentId, onMeta, onContent, onError, onDone }: {
+  question: string; conversationId: string; ragMode: boolean; subject: string; documentId?: string;
   onMeta: (metadata: { conversationId: string }) => void;
-  onContent: (text: string) => void;
-  onError: (errMessage: string) => void;
-  onDone: () => void;
+  onContent: (text: string) => void; onError: (message: string) => void; onDone: () => void;
 }) {
-  const token = getStoredToken();
-  const url = `/api/tutor/ask/stream?question=${encodeURIComponent(question)}&conversationId=${encodeURIComponent(conversationId)}&ragMode=${ragMode}&subject=${encodeURIComponent(subject)}&token=${encodeURIComponent(token)}`;
-  
-  const sse = new EventSource(url);
-
-  sse.onmessage = (event) => {
-    if (event.data === "[DONE]") {
-      sse.close();
-      onDone();
-      return;
-    }
-
+  const controller = new AbortController();
+  void (async () => {
     try {
-      const payload = JSON.parse(event.data);
-      if (payload.type === "meta") {
-        onMeta({ conversationId: payload.conversationId });
-      } else if (payload.type === "content") {
-        onContent(payload.text);
-      } else if (payload.type === "error") {
-        sse.close();
-        onError(payload.message || "Tutor model streaming error");
+      const response = await fetch('/api/tutor/ask/stream', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getStoredToken()}` },
+        body: JSON.stringify({ question, conversationId, ragMode, subject, documentId }), signal: controller.signal,
+      });
+      if (!response.ok || !response.body) {
+        if (response.status === 401) clearStoredAuth();
+        throw new Error('Tutor is unavailable. Please retry or sign in again.');
       }
-    } catch (err) {
-      console.error("Stream parse error:", err);
-      onError("Error parsing stream content");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder(); let buffer = ''; let done = false;
+      while (!done) {
+        const part = await reader.read();
+        buffer += decoder.decode(part.value || new Uint8Array(), { stream: !part.done });
+        let boundary: number;
+        while ((boundary = buffer.indexOf('\n\n')) >= 0) {
+          const event = buffer.slice(0, boundary); buffer = buffer.slice(boundary + 2);
+          const data = event.split('\n').filter(line => line.startsWith('data: ')).map(line => line.slice(6)).join('\n');
+          if (!data) continue;
+          if (data === '[DONE]') { done = true; onDone(); break; }
+          const payload = JSON.parse(data);
+          if (payload.type === 'meta') onMeta({ conversationId: payload.conversationId });
+          if (payload.type === 'content') onContent(payload.text);
+          if (payload.type === 'error') throw new Error(payload.message || 'Tutor response interrupted.');
+        }
+        if (part.done && !done) throw new Error('Tutor response interrupted. Please retry.');
+      }
+      await reader.cancel();
+    } catch (error: unknown) {
+      if (!controller.signal.aborted) onError(error instanceof Error ? error.message : 'Tutor connection interrupted.');
     }
-  };
-
-  sse.onerror = () => {
-    sse.close();
-    onError("AI Tutor connection lost. Verify backend configuration and your Gemini API key.");
-  };
-
-  return () => sse.close();
+  })();
+  return () => controller.abort();
 }
 
 export async function getSystemHealth() {

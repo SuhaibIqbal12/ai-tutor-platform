@@ -158,6 +158,13 @@ model QuizAttempt {
 model Document {
   id                    String          @id @default(uuid())
   title                 String
+  status                String          @default("UPLOADED")
+  progress              String?
+  error                 String?
+  inputHash             String?
+  sourceUrl             String?
+  pageCount             Int?
+  warnings              String          @default("[]")
   content               String?
   fileType              String          @default("PDF") // PDF, PPT, TXT, MD, YOUTUBE, WEB
   userId                String
@@ -171,6 +178,9 @@ model Document {
   estimatedReadingTime  Int?
   createdAt             DateTime        @default(now())
   updatedAt             DateTime        @updatedAt
+
+  @@index([userId, status])
+  @@unique([userId, inputHash])
 }
 
 model DocumentChunk {
@@ -178,8 +188,15 @@ model DocumentChunk {
   documentId String
   document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
   content    String
+  chunkIndex Int      @default(0)
+  pageNumber Int?
+  timestamp  Float?
+  model      String   @default("Xenova/all-MiniLM-L6-v2")
+  dimensions Int      @default(384)
   embedding  String   // JSON serialized float array representing the vector embedding
   createdAt  DateTime @default(now())
+
+  @@index([documentId])
 }
 
 model TopicMastery {

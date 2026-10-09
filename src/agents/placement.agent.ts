@@ -49,7 +49,7 @@ ${resumeText}
       const result = await model.generateContent(prompt);
       return JSON.parse(result.response.text());
     } catch (err: any) {
-      console.error('Placement Agent Resume Analysis Error:', err);
+      console.error('Placement Agent Resume Analysis Error:');
       throw new AppError(`Failed to parse resume: ${err.message || err}`, 502);
     }
   }
@@ -109,7 +109,7 @@ Generate the next question/follow-up. Provide constructive feedback on their las
 
       return parsed;
     } catch (err: any) {
-      console.error('Placement Agent Interview Error:', err);
+      console.error('Placement Agent Interview Error:');
       throw new AppError(`Failed to run mock interview: ${err.message || err}`, 502);
     }
   }
@@ -194,7 +194,7 @@ Be encouraging, specific, and constructive.`;
       const result = await scorecardModel.generateContent(prompt);
       return JSON.parse(result.response.text());
     } catch (err: any) {
-      console.error('Scorecard Generation Error:', err);
+      console.error('Scorecard Generation Error:');
       // Return a fallback scorecard if generation fails
       return {
         overallScore: 5,
@@ -239,7 +239,7 @@ Be encouraging, specific, and constructive.`;
       const result = await model.generateContent(prompt);
       return JSON.parse(result.response.text());
     } catch (err: any) {
-      console.error('Placement Agent Practice Generation Error:', err);
+      console.error('Placement Agent Practice Generation Error:');
       throw new AppError(`Failed to generate practice challenge: ${err.message || err}`, 502);
     }
   }

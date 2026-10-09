@@ -84,7 +84,7 @@ export class LearningDnaService {
       
       console.log(`[DNA Engine] Updated learning profile for user ${userId}. Level: ${currentLevel}, Retention: ${retentionRate}%, Consistency: ${studyConsistency}%`);
     } catch (error) {
-      console.error('[DNA Engine Error] Failed to update DNA metrics:', error);
+      console.error('[DNA Engine Error] Failed to update DNA metrics:');
     }
   }
 }

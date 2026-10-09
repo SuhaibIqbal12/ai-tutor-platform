@@ -56,7 +56,8 @@ export const validateAuthBody = (schema: z.ZodSchema) => {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // 1. Sanitize request body
-      req.body = sanitizeBody(req.body);
+      // Never mutate passwords: punctuation is part of the credential.
+      if (typeof req.body?.email === 'string') req.body.email = req.body.email.trim().toLowerCase();
 
       // 2. Validate using Zod schema
       await schema.parseAsync(req.body);
