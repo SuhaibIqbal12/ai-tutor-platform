@@ -10,7 +10,11 @@ interface CodeEditorProps {
   className?: string;
 }
 
-export default function CodeEditor({ value, onChange, className = "" }: CodeEditorProps) {
+export default function CodeEditor({
+  value,
+  onChange,
+  className = "",
+}: CodeEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
   const lineCount = Math.max(1, value.split("\n").length);
@@ -33,7 +37,8 @@ export default function CodeEditor({ value, onChange, className = "" }: CodeEdit
       const end = textarea.selectionEnd;
 
       // Insert 4 spaces for tab
-      const newValue = value.substring(0, start) + "    " + value.substring(end);
+      const newValue =
+        value.substring(0, start) + "    " + value.substring(end);
       onChange(newValue);
 
       // Reset selection caret position
@@ -44,11 +49,13 @@ export default function CodeEditor({ value, onChange, className = "" }: CodeEdit
   };
 
   return (
-    <div className={`flex bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg h-full ${className}`}>
+    <div
+      className={`flex bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg h-full ${className}`}
+    >
       {/* Gutter (Line Numbers) */}
       <div
         ref={gutterRef}
-        className="w-12 bg-slate-950/80 text-right pr-3 select-none py-4 text-xs font-mono text-slate-650 leading-relaxed border-r border-slate-850 overflow-hidden"
+        className="w-12 bg-slate-950/80 text-right pr-3 select-none py-4 text-xs font-mono text-slate-400 leading-relaxed border-r border-slate-800 overflow-hidden"
       >
         {Array.from({ length: lineCount }).map((_, i) => (
           <div key={i} className="h-5">
@@ -60,6 +67,7 @@ export default function CodeEditor({ value, onChange, className = "" }: CodeEdit
       {/* Editor Textarea */}
       <textarea
         ref={textareaRef}
+        aria-label="Code editor"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onScroll={handleScroll}

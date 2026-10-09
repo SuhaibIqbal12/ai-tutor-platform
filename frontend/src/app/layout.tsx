@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, Fira_Code } from "next/font/google";
 import "./globals.css";
+import "katex/dist/katex.min.css";
+import NoticeProvider from "@/components/NoticeProvider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -13,8 +15,9 @@ const firaCode = Fira_Code({
 });
 
 export const metadata: Metadata = {
-  title: "Personalized AI Tutor",
-  description: "Your Personal AI Learning Companion powered by RAG, Adaptive Learning and Intelligent Skill Tracking.",
+  title: "Tutor — Your learning workspace",
+  description:
+    "A focused workspace for your learning materials, guided study, practice and career preparation.",
 };
 
 export default function RootLayout({
@@ -27,7 +30,9 @@ export default function RootLayout({
       lang="en"
       className={`${inter.variable} ${firaCode.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <NoticeProvider>{children}</NoticeProvider>
+      </body>
     </html>
   );
 }

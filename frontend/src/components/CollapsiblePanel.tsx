@@ -3,13 +3,21 @@
 
 import React, { useState } from "react";
 import { ChevronDown } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import rehypeHighlight from "rehype-highlight";
 
 interface CollapsiblePanelProps {
   title: string;
   content: string;
 }
 
-export default function CollapsiblePanel({ title, content }: CollapsiblePanelProps) {
+export default function CollapsiblePanel({
+  title,
+  content,
+}: CollapsiblePanelProps) {
   const [isOpen, setIsOpen] = useState(true);
 
   return (
@@ -17,7 +25,8 @@ export default function CollapsiblePanel({ title, content }: CollapsiblePanelPro
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-4 py-2.5 bg-secondary/80 hover:bg-secondary transition-colors flex justify-between items-center text-xs font-bold text-foreground border-b border-border/50 cursor-pointer"
+        aria-expanded={isOpen}
+        className="w-full px-4 py-2.5 bg-secondary/80 hover:bg-secondary transition-colors flex justify-between items-center text-xs font-semibold text-foreground border-b border-border/50 cursor-pointer"
       >
         <span>{title}</span>
         <ChevronDown
@@ -28,8 +37,18 @@ export default function CollapsiblePanel({ title, content }: CollapsiblePanelPro
       </button>
 
       {isOpen && (
-        <div className="p-4 text-xs leading-relaxed text-foreground/90 bg-card whitespace-pre-wrap font-normal overflow-x-auto">
-          {content}
+        <div className="p-4 text-sm leading-relaxed text-foreground/90 bg-card font-normal overflow-x-auto">
+          <div className="study-markdown">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm, remarkMath]}
+              rehypePlugins={[
+                rehypeKatex,
+                [rehypeHighlight, { detect: false, ignoreMissing: true }],
+              ]}
+            >
+              {content}
+            </ReactMarkdown>
+          </div>
         </div>
       )}
     </div>
@@ -54,13 +73,21 @@ export function formatExplanations(content: string) {
   });
 
   if (panels.length === 0) {
-    return <div className="text-foreground/90 leading-relaxed whitespace-pre-wrap">{content}</div>;
+    return (
+      <div className="text-foreground/90 leading-relaxed whitespace-pre-wrap">
+        {content}
+      </div>
+    );
   }
 
   return (
     <div className="space-y-3 mt-3">
       {panels.map((panel, idx) => (
-        <CollapsiblePanel key={idx} title={panel.heading} content={panel.body} />
+        <CollapsiblePanel
+          key={idx}
+          title={panel.heading}
+          content={panel.body}
+        />
       ))}
     </div>
   );

@@ -1,5 +1,7 @@
 // frontend/src/app/(dashboard)/planner/page.tsx
 "use client";
+import PageHeader from "@/components/PageHeader";
+import { useNotice } from "@/components/NoticeProvider";
 import type { StudyPlan } from "@/lib/contracts";
 import { errorMessage } from "@/lib/contracts";
 
@@ -8,11 +10,14 @@ import { Calendar as CalendarIcon, CheckCircle } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 
 export default function PlannerPage() {
+  const notify = useNotice();
   const [examDate, setExamDate] = useState("");
   const [dailyHours, setDailyHours] = useState("3");
-  const [academicGoal, setAcademicGoal] = useState("Master current semester courses");
+  const [academicGoal, setAcademicGoal] = useState(
+    "Master current semester courses",
+  );
   const [studyPlan, setStudyPlan] = useState<StudyPlan | null>(null);
-  
+
   const [loading, setLoading] = useState(false);
   const [fetchingLatest, setFetchingLatest] = useState(true);
 
@@ -22,10 +27,12 @@ export default function PlannerPage() {
         const res = await apiRequest("/api/planner/latest");
         if (res.status === "success" && res.data.plan) {
           setStudyPlan(res.data.plan);
-          
+
           // Pre-populate forms if plan exists
           if (res.data.plan.examDate) {
-            const formattedDate = new Date(res.data.plan.examDate).toISOString().split("T")[0];
+            const formattedDate = new Date(res.data.plan.examDate)
+              .toISOString()
+              .split("T")[0];
             setExamDate(formattedDate);
           }
         }
@@ -40,7 +47,8 @@ export default function PlannerPage() {
 
   const handleGeneratePlan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!examDate || !dailyHours.trim() || !academicGoal.trim() || loading) return;
+    if (!examDate || !dailyHours.trim() || !academicGoal.trim() || loading)
+      return;
 
     setLoading(true);
     try {
@@ -53,7 +61,7 @@ export default function PlannerPage() {
         setStudyPlan(res.data);
       }
     } catch (err: unknown) {
-      alert("Failed to build roadmap schedule: " + errorMessage(err));
+      notify("Could not create your study plan. " + errorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -63,7 +71,9 @@ export default function PlannerPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-3">
         <div className="h-8 w-8 border-4 border-slate-700 border-t-white dark:border-slate-800 dark:border-t-foreground rounded-full animate-spin"></div>
-        <p className="text-xs text-muted-foreground font-semibold">Retrieving calendar milestones...</p>
+        <p className="text-xs text-muted-foreground font-semibold">
+          Retrieving calendar milestones...
+        </p>
       </div>
     );
   }
@@ -71,61 +81,65 @@ export default function PlannerPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="border-b border-border pb-4">
-        <h2 className="text-2xl font-bold tracking-tight text-foreground">Smart Study Planner</h2>
-        <p className="text-xs text-muted-foreground mt-1 font-medium">
-          Generate daily routines and weekly milestones automatically calculated based on target exam dates.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="MAKE TIME FOR PROGRESS"
+        title="Study planner"
+        description="Set your goals and turn them into a realistic study routine."
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Left Form: Parameters */}
-        <div className="md:col-span-1 bg-card border border-border rounded-2xl p-6 shadow-sm space-y-4 h-fit">
+        <div className="md:col-span-1 bg-card border border-border rounded-xl p-6 space-y-4 h-fit">
           <div className="flex items-center gap-2 border-b border-border pb-3">
             <CalendarIcon className="h-5 w-5 text-indigo-400" />
-            <h3 className="text-sm font-bold text-foreground">Planner Parameters</h3>
+            <h3 className="text-sm font-bold text-foreground">
+              Your study goals
+            </h3>
           </div>
 
           <form onSubmit={handleGeneratePlan} className="space-y-4">
             <div>
-              <label className="text-slate-350 text-[10px] font-bold uppercase tracking-wider block mb-1.5">
+              <label className="text-muted-foreground text-xs font-bold uppercase tracking-wider block mb-1.5">
                 Target Exam Date
               </label>
               <input
+                aria-label="Target Exam Date"
                 type="date"
                 required
                 value={examDate}
                 onChange={(e) => setExamDate(e.target.value)}
-                className="w-full p-2.5 border border-border bg-secondary/30 rounded-xl text-xs focus:outline-none focus:border-indigo-500 text-foreground shadow-inner"
+                className="w-full p-2.5 border border-border bg-secondary/30 rounded-xl text-xs focus:outline-none focus:border-indigo-500 text-foreground"
               />
             </div>
 
             <div>
-              <label className="text-slate-350 text-[10px] font-bold uppercase tracking-wider block mb-1.5">
+              <label className="text-muted-foreground text-xs font-bold uppercase tracking-wider block mb-1.5">
                 Daily Study Hours Available
               </label>
               <input
+                aria-label="Daily Study Hours Available"
                 type="number"
                 min="1"
                 max="24"
                 required
                 value={dailyHours}
                 onChange={(e) => setDailyHours(e.target.value)}
-                className="w-full p-2.5 border border-border bg-secondary/30 rounded-xl text-xs focus:outline-none focus:border-indigo-500 text-foreground shadow-inner"
+                className="w-full p-2.5 border border-border bg-secondary/30 rounded-xl text-xs focus:outline-none focus:border-indigo-500 text-foreground"
                 placeholder="e.g. 3"
               />
             </div>
 
             <div>
-              <label className="text-slate-350 text-[10px] font-bold uppercase tracking-wider block mb-1.5">
+              <label className="text-muted-foreground text-xs font-bold uppercase tracking-wider block mb-1.5">
                 Primary Academic Goal
               </label>
               <input
+                aria-label="Primary Academic Goal"
                 type="text"
                 required
                 value={academicGoal}
                 onChange={(e) => setAcademicGoal(e.target.value)}
-                className="w-full p-2.5 border border-border bg-secondary/30 rounded-xl text-xs focus:outline-none focus:border-indigo-500 text-foreground placeholder-muted-foreground mt-1 shadow-inner"
+                className="w-full p-2.5 border border-border bg-secondary/30 rounded-xl text-xs focus:outline-none focus:border-indigo-500 text-foreground placeholder-muted-foreground mt-1"
                 placeholder="e.g. Score GPA > 9.0, Master algorithms"
               />
             </div>
@@ -133,7 +147,7 @@ export default function PlannerPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2 bg-slate-950 hover:bg-slate-900 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-950 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer shadow disabled:opacity-50"
+              className="w-full py-2 bg-primary hover:opacity-90 text-primary-foreground rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer shadow disabled:opacity-50"
             >
               {loading ? "Aligning modules..." : "Compile Study Calendar"}
             </button>
@@ -143,12 +157,15 @@ export default function PlannerPage() {
         {/* Right Panel: Plan Display */}
         <div className="md:col-span-2 space-y-6">
           {studyPlan ? (
-            <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-6 animate-fade-in">
+            <div className="bg-card border border-border rounded-xl p-6 space-y-6 animate-fade-in">
               <div className="border-b border-border pb-3">
-                <h3 className="text-sm font-bold text-foreground">{studyPlan.title}</h3>
+                <h3 className="text-sm font-bold text-foreground">
+                  {studyPlan.title}
+                </h3>
                 {studyPlan.examDate && (
-                  <p className="text-[10px] text-muted-foreground mt-1.5 font-mono">
-                    Target Exam: {new Date(studyPlan.examDate).toLocaleDateString()}
+                  <p className="text-xs text-muted-foreground mt-1.5 font-mono">
+                    Target Exam:{" "}
+                    {new Date(studyPlan.examDate).toLocaleDateString()}
                   </p>
                 )}
               </div>
@@ -156,7 +173,7 @@ export default function PlannerPage() {
               {/* 1. Daily routine */}
               {studyPlan.dailyPlan?.length > 0 && (
                 <div className="space-y-2.5">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
                     Daily Task Schedule Checklist:
                   </span>
                   <div className="grid grid-cols-1 gap-2">
@@ -169,7 +186,7 @@ export default function PlannerPage() {
                           <CheckCircle className="h-4 w-4 text-emerald-500 shrink-0" />
                           {item.task}
                         </span>
-                        <span className="px-2 py-0.5 bg-slate-950 dark:bg-slate-800 text-slate-350 rounded text-[9px] font-bold font-mono shrink-0">
+                        <span className="px-2 py-0.5 bg-slate-950 dark:bg-slate-800 text-muted-foreground rounded text-xs font-bold font-mono shrink-0">
                           {item.durationMinutes} mins
                         </span>
                       </div>
@@ -181,7 +198,7 @@ export default function PlannerPage() {
               {/* 2. Weekly milestones roadmap */}
               {studyPlan.weeklyPlan?.length > 0 && (
                 <div className="space-y-3 border-t border-border/60 pt-4">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
                     4-Week Milestones Pathway:
                   </span>
                   <div className="space-y-3">
@@ -192,11 +209,11 @@ export default function PlannerPage() {
                       >
                         <div className="flex justify-between items-center gap-4 border-b border-border/40 pb-1.5 font-bold">
                           <span className="text-foreground">{wk.week}</span>
-                          <span className="px-2 py-0.5 bg-secondary text-foreground text-[9px] rounded-lg border border-border uppercase tracking-wider">
+                          <span className="px-2 py-0.5 bg-secondary text-foreground text-xs rounded-lg border border-border uppercase tracking-wider">
                             {wk.focus}
                           </span>
                         </div>
-                        <ul className="list-disc pl-4 text-muted-foreground space-y-1 mt-1 text-[11px] leading-relaxed font-semibold">
+                        <ul className="list-disc pl-4 text-muted-foreground space-y-1 mt-1 text-xs leading-relaxed font-semibold">
                           {wk.tasks?.map((t: string, i: number) => (
                             <li key={i}>{t}</li>
                           ))}
@@ -210,7 +227,7 @@ export default function PlannerPage() {
               {/* 3. Monthly tasks */}
               {studyPlan.monthlyPlan?.length > 0 && (
                 <div className="space-y-2.5 border-t border-border/60 pt-4">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
                     Long-Term Core Milestones (3 Months):
                   </span>
                   <ul className="list-disc pl-5 text-xs text-foreground/80 space-y-1.5 font-semibold leading-relaxed">
@@ -222,12 +239,15 @@ export default function PlannerPage() {
               )}
             </div>
           ) : (
-            <div className="bg-card border border-border rounded-2xl p-10 flex flex-col items-center justify-center text-center max-w-sm mx-auto space-y-4 py-16">
+            <div className="bg-card border border-border rounded-xl p-10 flex flex-col items-center justify-center text-center max-w-sm mx-auto space-y-4 py-16">
               <CalendarIcon className="h-10 w-10 text-indigo-500 animate-pulse" />
-              <h4 className="text-sm font-bold text-foreground">Schedules Generation</h4>
+              <h4 className="text-sm font-bold text-foreground">
+                Schedules Generation
+              </h4>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Set target exam dates, goals, and daily study hours on the left to generate dynamic 
-                calendars synced to your weaker categories automatically.
+                Set target exam dates, goals, and daily study hours on the left
+                to generate dynamic calendars synced to your weaker categories
+                automatically.
               </p>
             </div>
           )}
