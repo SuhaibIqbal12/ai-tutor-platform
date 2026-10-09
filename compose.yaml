@@ -1,0 +1,77 @@
+services:
+  database:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tutor
+      POSTGRES_PASSWORD: ${LOCAL_DB_PASSWORD:?Set LOCAL_DB_PASSWORD in .env}
+      POSTGRES_DB: tutor
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U tutor -d tutor]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  migrate:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://tutor:${LOCAL_DB_PASSWORD}@database:5432/tutor?schema=public
+    command: npx prisma migrate deploy
+    depends_on:
+      database:
+        condition: service_healthy
+  api:
+    build: .
+    env_file: .env
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgresql://tutor:${LOCAL_DB_PASSWORD}@database:5432/tutor?schema=public
+      REDIS_URL: redis://redis:6379
+      RAG_WORKER_ENABLED: 'false'
+      FRONTEND_ORIGIN: http://localhost:3000
+    ports:
+      - 127.0.0.1:3001:3001
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+  worker:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://tutor:${LOCAL_DB_PASSWORD}@database:5432/tutor?schema=public
+      REDIS_URL: redis://redis:6379
+      EMBEDDING_CACHE_DIR: /app/model-cache
+    command: npm run worker
+    volumes:
+      - model-cache:/app/model-cache
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+  frontend:
+    build:
+      context: frontend
+      args:
+        BACKEND_URL: http://api:3001
+    ports:
+      - 127.0.0.1:3000:3000
+    depends_on:
+      - api
+volumes:
+  database:
+  redis:
+  model-cache:

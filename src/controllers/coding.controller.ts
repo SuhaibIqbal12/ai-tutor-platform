@@ -98,7 +98,7 @@ export const reviewSubmission = async (
 
       // Phase 2: Update Learning DNA codingGrowthScore
       if (review.isCorrect) {
-        await prisma.userProfile.update({
+        await prisma.userProfile.updateMany({
           where: { userId },
           data: { codingGrowthScore: { increment: 1.5 } }
         });

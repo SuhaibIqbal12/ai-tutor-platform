@@ -1,3 +1,4 @@
+import { moduleOutputs, parseModuleOutput } from '../services/module-output';
 import { genAI, GEMINI_MODEL } from '../config/gemini';
 import { SchemaType } from '@google/generative-ai';
 import { AppError } from '../middleware/error.middleware';
@@ -59,7 +60,7 @@ Include starter boilerplate code, sample test cases, and a list of hints that he
       const result = await model.generateContent(prompt);
       let text = result.response.text();
       text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      return JSON.parse(text);
+      return parseModuleOutput(text, moduleOutputs.exercise);
     } catch (err: any) {
       console.error('Coding Agent Exercise Generation Error:');
       throw new AppError(`Failed to generate coding exercise: ${err.message || err}`, 502);
@@ -129,7 +130,7 @@ Tailor the feedback and hints to the student's level and style (e.g. more struct
       const result = await model.generateContent(prompt);
       let text = result.response.text();
       text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      return JSON.parse(text);
+      return parseModuleOutput(text, moduleOutputs.review);
     } catch (err: any) {
       console.error('Coding Agent Code Review Error:');
       throw new AppError(`Failed to review code: ${err.message || err}`, 502);
