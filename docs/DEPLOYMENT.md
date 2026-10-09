@@ -51,3 +51,13 @@ Run `TEST_REDIS_URL=redis://127.0.0.1:6379 npm test` with a test Redis instance.
 Run `cd frontend && npm run lint && BACKEND_URL=http://localhost:3001 npm run build`.
 
 After deployment, test in desktop and mobile browsers: register/login, OAuth if enabled, upload a real PDF, watch durable stages through READY, ask direct/paraphrased/multi-page questions, check quoted facts and page citations, ask related and unrelated absent questions, follow up, switch source and account, generate/submit MCQ and written quizzes, inspect analytics. Also smoke-test coding, ATS/resume, interview, planner and roadmap with real models. The automated suite is not a substitute for these release gates.
+
+## One-command localhost stack
+
+With Docker Desktop running, copy `.env.example` to `.env`, set a URL-safe random `LOCAL_DB_PASSWORD`, a random `JWT_SECRET` of at least 32 characters, and one valid model-provider key. Then run:
+
+```bash
+docker compose up --build -d
+```
+
+Open http://localhost:3000. The API is http://localhost:3001; `/ready` reports whether the database, Redis, worker, authentication and provider configuration are ready. Compose runs migrations before the API and worker, retains database/Redis/model-cache volumes, and binds ports to your computer's loopback interface. Keep this local stack private; it is not a production hosting service. Stop with `docker compose down` without `--volumes` to retain data. Docker images still require a real provider smoke test and must be verified on a Docker-enabled host before release.

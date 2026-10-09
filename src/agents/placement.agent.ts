@@ -1,3 +1,4 @@
+import { moduleOutputs, parseModuleOutput } from '../services/module-output';
 import { genAI, GEMINI_MODEL } from '../config/gemini';
 import { SchemaType } from '@google/generative-ai';
 import { AppError } from '../middleware/error.middleware';
@@ -47,7 +48,7 @@ ${resumeText}
 
     try {
       const result = await model.generateContent(prompt);
-      return JSON.parse(result.response.text());
+      return parseModuleOutput(result.response.text(), moduleOutputs.resume);
     } catch (err: any) {
       console.error('Placement Agent Resume Analysis Error:');
       throw new AppError(`Failed to parse resume: ${err.message || err}`, 502);
@@ -99,7 +100,7 @@ Generate the next question/follow-up. Provide constructive feedback on their las
 
     try {
       const result = await model.generateContent(prompt);
-      const parsed = JSON.parse(result.response.text());
+      const parsed = parseModuleOutput(result.response.text(), moduleOutputs.interview);
 
       // If session is ending, generate a full scorecard
       if (parsed.endSession) {
@@ -192,18 +193,10 @@ Be encouraging, specific, and constructive.`;
 
     try {
       const result = await scorecardModel.generateContent(prompt);
-      return JSON.parse(result.response.text());
+      return parseModuleOutput(result.response.text(), moduleOutputs.scorecard);
     } catch (err: any) {
       console.error('Scorecard Generation Error:');
-      // Return a fallback scorecard if generation fails
-      return {
-        overallScore: 5,
-        grade: 'C+',
-        overallComment: 'Interview session completed. Detailed scoring unavailable — please try again.',
-        strengths: ['Completed the interview session'],
-        improvements: ['Practice more mock interviews to improve'],
-        answerBreakdown: []
-      };
+      throw new AppError('Interview scoring is unavailable. Please retry.', 502);
     }
   }
 
@@ -237,7 +230,7 @@ Be encouraging, specific, and constructive.`;
 
     try {
       const result = await model.generateContent(prompt);
-      return JSON.parse(result.response.text());
+      return parseModuleOutput(result.response.text(), moduleOutputs.practice);
     } catch (err: any) {
       console.error('Placement Agent Practice Generation Error:');
       throw new AppError(`Failed to generate practice challenge: ${err.message || err}`, 502);

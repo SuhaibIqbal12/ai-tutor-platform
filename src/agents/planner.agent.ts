@@ -1,3 +1,4 @@
+import { moduleOutputs, parseModuleOutput } from '../services/module-output';
 import { genAI, GEMINI_MODEL } from '../config/gemini';
 import { prisma } from '../config/prisma';
 import { SchemaType } from '@google/generative-ai';
@@ -85,7 +86,7 @@ Generate realistic daily tasks, a 4-week calendar breakdown, and a 3-month long-
 
     try {
       const result = await model.generateContent(prompt);
-      const planJson = JSON.parse(result.response.text());
+      const planJson = parseModuleOutput(result.response.text(), moduleOutputs.plan);
 
       // Save plan in the database
       const plan = await prisma.studyPlan.create({

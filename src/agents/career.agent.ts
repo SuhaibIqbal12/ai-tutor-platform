@@ -1,3 +1,4 @@
+import { moduleOutputs, parseModuleOutput } from '../services/module-output';
 import { genAI, GEMINI_MODEL } from '../config/gemini';
 import { SchemaType } from '@google/generative-ai';
 import { AppError } from '../middleware/error.middleware';
@@ -97,7 +98,7 @@ If their Coding Growth Score is high, suggest advanced technical projects or com
       const result = await model.generateContent(prompt);
       let text = result.response.text();
       text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      return JSON.parse(text);
+      return parseModuleOutput(text, moduleOutputs.career);
     } catch (err: any) {
       console.error('Career Agent Plan Generation Error:');
       throw new AppError(`Failed to generate career path: ${err.message || err}`, 502);
