@@ -1,36 +1,33 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Tutor frontend
 
-## Getting Started
+The Next.js application provides the landing page, account setup, learning dashboard, resource library, tutor chat, practice quizzes, coding studio, career preparation, and study planner.
 
-First, run the development server:
+## Run locally
+
+From this directory:
 
 ```bash
+npm ci
+cp .env.example .env.local
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Set `BACKEND_URL` to the backend origin (for example, `http://localhost:3001`, without `/api`). Next.js proxies the frontend’s `/api` requests to this origin. Run the backend and its worker separately using the repository’s [deployment guide](../docs/DEPLOYMENT.md). Optional Supabase settings enable the configured OAuth providers; password authentication uses the backend.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Open http://localhost:3000. Dashboard figures come from the API. A failed request shows an error and retry action rather than sample activity.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Verify changes
 
-## Learn More
+```bash
+npm test
+npm run lint
+npm run build
+```
 
-To learn more about Next.js, take a look at the following resources:
+The frontend tests exercise sign-in, account creation, onboarding submission, dashboard failures, session preservation during an outage, navigation, and notifications with mocked network responses. They do not verify live OAuth or generated tutor answers. Backend integration tests run from the repository root.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Interface conventions
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Shared colors, spacing, typography, focus states, and responsive layouts live in `src/app/globals.css`. Use `PageHeader` for workspace titles, `NoticeProvider` for user-visible notifications, and `CollapsiblePanel` for Markdown study material. `MindMap` renders sanitized Mermaid diagrams with strict security settings. Navigation supports desktop collapse and a keyboard-accessible mobile drawer; users can select a light or dark theme.
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Check desktop and mobile layouts in a browser before releasing a visual change. A production build and DOM tests do not replace visual review.

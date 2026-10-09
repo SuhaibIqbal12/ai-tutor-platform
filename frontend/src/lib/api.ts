@@ -86,10 +86,16 @@ export function clearStoredAuth() {
   }
 }
 
-export async function apiRequest(endpoint: string, method = "GET", body: unknown = null) {
+export async function apiRequest(
+  endpoint: string,
+  method = "GET",
+  body: unknown = null,
+) {
   const token = getStoredToken();
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
   if (token) {
     headers["Authorization"] = `Bearer ${token}`;
   }
@@ -101,15 +107,19 @@ export async function apiRequest(endpoint: string, method = "GET", body: unknown
 
   const res = await fetch(`${BASE_URL}${endpoint}`, config);
   const text = await res.text();
-  
+
   let data;
   try {
     data = JSON.parse(text);
   } catch {
     if (!res.ok) {
-      throw new Error(`API Error (${res.status}): ${text}`);
+      throw new Error(
+        `The service is temporarily unavailable (${res.status}). Please try again.`,
+      );
     }
-    throw new Error(`Invalid JSON response: ${text}`);
+    throw new Error(
+      "The service returned an unexpected response. Please try again.",
+    );
   }
 
   if (!res.ok) {
@@ -124,43 +134,91 @@ export async function apiRequest(endpoint: string, method = "GET", body: unknown
   return data;
 }
 
-export function setupStreamingTutor({ question, conversationId, ragMode, subject, documentId, onMeta, onContent, onError, onDone }: {
-  question: string; conversationId: string; ragMode: boolean; subject: string; documentId?: string;
+export function setupStreamingTutor({
+  question,
+  conversationId,
+  ragMode,
+  subject,
+  documentId,
+  onMeta,
+  onContent,
+  onError,
+  onDone,
+}: {
+  question: string;
+  conversationId: string;
+  ragMode: boolean;
+  subject: string;
+  documentId?: string;
   onMeta: (metadata: { conversationId: string }) => void;
-  onContent: (text: string) => void; onError: (message: string) => void; onDone: () => void;
+  onContent: (text: string) => void;
+  onError: (message: string) => void;
+  onDone: () => void;
 }) {
   const controller = new AbortController();
   void (async () => {
     try {
-      const response = await fetch('/api/tutor/ask/stream', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getStoredToken()}` },
-        body: JSON.stringify({ question, conversationId, ragMode, subject, documentId }), signal: controller.signal,
+      const response = await fetch("/api/tutor/ask/stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${getStoredToken()}`,
+        },
+        body: JSON.stringify({
+          question,
+          conversationId,
+          ragMode,
+          subject,
+          documentId,
+        }),
+        signal: controller.signal,
       });
       if (!response.ok || !response.body) {
         if (response.status === 401) clearStoredAuth();
-        throw new Error('Tutor is unavailable. Please retry or sign in again.');
+        throw new Error("Tutor is unavailable. Please retry or sign in again.");
       }
       const reader = response.body.getReader();
-      const decoder = new TextDecoder(); let buffer = ''; let done = false;
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let done = false;
       while (!done) {
         const part = await reader.read();
-        buffer += decoder.decode(part.value || new Uint8Array(), { stream: !part.done });
+        buffer += decoder.decode(part.value || new Uint8Array(), {
+          stream: !part.done,
+        });
         let boundary: number;
-        while ((boundary = buffer.indexOf('\n\n')) >= 0) {
-          const event = buffer.slice(0, boundary); buffer = buffer.slice(boundary + 2);
-          const data = event.split('\n').filter(line => line.startsWith('data: ')).map(line => line.slice(6)).join('\n');
+        while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+          const event = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          const data = event
+            .split("\n")
+            .filter((line) => line.startsWith("data: "))
+            .map((line) => line.slice(6))
+            .join("\n");
           if (!data) continue;
-          if (data === '[DONE]') { done = true; onDone(); break; }
+          if (data === "[DONE]") {
+            done = true;
+            onDone();
+            break;
+          }
           const payload = JSON.parse(data);
-          if (payload.type === 'meta') onMeta({ conversationId: payload.conversationId });
-          if (payload.type === 'content') onContent(payload.text);
-          if (payload.type === 'error') throw new Error(payload.message || 'Tutor response interrupted.');
+          if (payload.type === "meta")
+            onMeta({ conversationId: payload.conversationId });
+          if (payload.type === "content") onContent(payload.text);
+          if (payload.type === "error")
+            throw new Error(payload.message || "Tutor response interrupted.");
         }
-        if (part.done && !done) throw new Error('Tutor response interrupted. Please retry.');
+        if (part.done && !done)
+          throw new Error("Tutor response interrupted. Please retry.");
       }
       await reader.cancel();
     } catch (error: unknown) {
-      if (!controller.signal.aborted) onError(error instanceof Error ? error.message : 'Tutor connection interrupted.');
+      if (!controller.signal.aborted)
+        onError(
+          error instanceof Error
+            ? error.message
+            : "Tutor connection interrupted.",
+        );
     }
   })();
   return () => controller.abort();

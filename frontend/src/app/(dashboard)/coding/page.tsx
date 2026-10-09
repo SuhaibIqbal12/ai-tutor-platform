@@ -1,14 +1,23 @@
 // frontend/src/app/(dashboard)/coding/page.tsx
 "use client";
+import PageHeader from "@/components/PageHeader";
+import { useNotice } from "@/components/NoticeProvider";
 import type { Exercise, CodeReview } from "@/lib/contracts";
 import { errorMessage } from "@/lib/contracts";
 
 import React, { useState } from "react";
-import { Terminal, Code2, AlertTriangle, ShieldCheck, HelpCircle } from "lucide-react";
+import {
+  Terminal,
+  Code2,
+  AlertTriangle,
+  ShieldCheck,
+  HelpCircle,
+} from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import CodeEditor from "@/components/CodeEditor";
 
 export default function CodingPage() {
+  const notify = useNotice();
   const [lang, setLang] = useState("Python");
   const [topic, setTopic] = useState("Binary Search");
   const [diff, setDiff] = useState<"easy" | "medium" | "hard">("medium");
@@ -38,7 +47,7 @@ export default function CodingPage() {
         setCode(res.data.starterCode || "");
       }
     } catch (err: unknown) {
-      alert("Failed to retrieve coding challenge: " + errorMessage(err));
+      notify("Could not load a challenge. " + errorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -59,7 +68,7 @@ export default function CodingPage() {
         setReview(res.data);
       }
     } catch (err: unknown) {
-      alert("Failed to evaluate submission: " + errorMessage(err));
+      notify("Could not review your code. " + errorMessage(err));
     } finally {
       setSubmittingCode(false);
     }
@@ -67,36 +76,41 @@ export default function CodingPage() {
 
   const showHint = () => {
     if (!exercise?.hints || exercise.hints.length === 0) {
-      alert("No hints available for this problem.");
+      notify("No hints available for this problem.", "info");
       return;
     }
-    alert(`Hints:\n${exercise.hints.map((h: string, i: number) => `${i + 1}. ${h}`).join("\n")}`);
+    notify(
+      `Hints:\n${exercise.hints.map((h: string, i: number) => `${i + 1}. ${h}`).join("\n")}`,
+      "info",
+    );
   };
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="border-b border-border pb-4">
-        <h2 className="text-2xl font-bold tracking-tight text-foreground">Interactive Coding Mentor</h2>
-        <p className="text-xs text-muted-foreground mt-1 font-medium">
-          Choose a language and data structure. Solve challenges in real time, and audit code complexity.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="THINK. WRITE. IMPROVE."
+        title="Coding studio"
+        description="Work through a challenge, try your approach, and review your code."
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Configuration Panel */}
-        <div className="lg:col-span-1 bg-card border border-border rounded-2xl p-6 shadow-sm space-y-5 h-fit">
+        <div className="lg:col-span-1 bg-card border border-border rounded-xl p-6 space-y-5 h-fit">
           <div className="flex items-center gap-2 border-b border-border pb-3">
             <Terminal className="h-5 w-5 text-indigo-400" />
-            <h3 className="text-sm font-bold text-foreground">Challenge Config</h3>
+            <h3 className="text-sm font-bold text-foreground">
+              Choose a challenge
+            </h3>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="text-slate-350 text-[10px] font-bold uppercase tracking-wider block mb-1.5">
+              <label className="text-muted-foreground text-xs font-bold uppercase tracking-wider block mb-1.5">
                 Target Language
               </label>
               <select
+                aria-label="Target Language"
                 value={lang}
                 onChange={(e) => setLang(e.target.value)}
                 className="w-full px-3 py-2 bg-secondary/40 border border-border text-slate-300 text-xs focus:outline-none focus:border-indigo-500 rounded-xl transition-colors"
@@ -111,23 +125,25 @@ export default function CodingPage() {
             </div>
 
             <div>
-              <label className="text-slate-350 text-[10px] font-bold uppercase tracking-wider block mb-1.5">
+              <label className="text-muted-foreground text-xs font-bold uppercase tracking-wider block mb-1.5">
                 Topic or Algorithm
               </label>
               <input
+                aria-label="Topic or Algorithm"
                 type="text"
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
-                className="w-full p-2.5 border border-border bg-secondary/30 rounded-xl text-xs focus:outline-none focus:border-indigo-500 text-foreground placeholder-muted-foreground mt-1 shadow-inner"
+                className="w-full p-2.5 border border-border bg-secondary/30 rounded-xl text-xs focus:outline-none focus:border-indigo-500 text-foreground placeholder-muted-foreground mt-1"
                 placeholder="Binary Search, Tree traversals..."
               />
             </div>
 
             <div>
-              <label className="text-slate-350 text-[10px] font-bold uppercase tracking-wider block mb-1.5">
+              <label className="text-muted-foreground text-xs font-bold uppercase tracking-wider block mb-1.5">
                 Difficulty
               </label>
               <select
+                aria-label="Difficulty"
                 value={diff}
                 onChange={(e) => setDiff(e.target.value as typeof diff)}
                 className="w-full px-3 py-2 bg-secondary/40 border border-border text-slate-300 text-xs focus:outline-none focus:border-indigo-500 rounded-xl transition-colors"
@@ -141,9 +157,11 @@ export default function CodingPage() {
             <button
               onClick={handleGenerateChallenge}
               disabled={loading || !topic.trim()}
-              className="w-full py-2 bg-slate-950 hover:bg-slate-900 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-slate-950 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer shadow disabled:opacity-50"
+              className="w-full py-2 bg-primary hover:opacity-90 text-primary-foreground rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer shadow disabled:opacity-50"
             >
-              {loading ? "Synthesizing challenge..." : "Generate Coding Exercise"}
+              {loading
+                ? "Synthesizing challenge..."
+                : "Generate Coding Exercise"}
             </button>
           </div>
         </div>
@@ -153,31 +171,42 @@ export default function CodingPage() {
           {exercise ? (
             <div className="space-y-4">
               {/* Exercise Description Box */}
-              <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-4">
+              <div className="bg-card border border-border rounded-xl p-6 space-y-4">
                 <div className="flex items-center justify-between gap-4 border-b border-border pb-3">
-                  <h3 className="text-sm font-bold text-foreground">{exercise.title}</h3>
-                  <span className="px-2.5 py-0.5 bg-indigo-500/10 text-indigo-500 border border-indigo-500/25 rounded text-[8px] font-bold uppercase tracking-wider">
+                  <h3 className="text-sm font-bold text-foreground">
+                    {exercise.title}
+                  </h3>
+                  <span className="px-2.5 py-0.5 bg-indigo-500/10 text-indigo-500 border border-indigo-500/25 rounded text-xs font-bold uppercase tracking-wider">
                     {diff}
                   </span>
                 </div>
-                
+
                 <p className="text-xs text-foreground/80 leading-relaxed whitespace-pre-wrap font-medium">
                   {exercise.description}
                 </p>
 
                 {exercise.testCases?.length > 0 && (
                   <div className="space-y-2 pt-2">
-                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
                       Sample Test Cases:
                     </span>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1 text-[10px] text-foreground/75 font-semibold">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1 text-xs text-foreground/75 font-semibold">
                       {exercise.testCases.map((tc, i: number) => (
-                        <div key={i} className="p-3 bg-secondary/35 border border-border rounded-xl">
+                        <div
+                          key={i}
+                          className="p-3 bg-secondary/35 border border-border rounded-xl"
+                        >
                           <div>
-                            <span className="text-muted-foreground">Input:</span> {tc.input}
+                            <span className="text-muted-foreground">
+                              Input:
+                            </span>{" "}
+                            {tc.input}
                           </div>
                           <div className="mt-1">
-                            <span className="text-muted-foreground">Output:</span> {tc.expectedOutput}
+                            <span className="text-muted-foreground">
+                              Output:
+                            </span>{" "}
+                            {tc.expectedOutput}
                           </div>
                         </div>
                       ))}
@@ -191,7 +220,7 @@ export default function CodingPage() {
                 <div className="absolute top-3 right-4 z-10 flex gap-2">
                   <button
                     onClick={showHint}
-                    className="p-1.5 px-3 bg-slate-950 text-slate-450 hover:text-white rounded-lg text-[10px] font-bold transition-colors cursor-pointer border border-slate-800 flex items-center gap-1 shadow"
+                    className="p-1.5 px-3 bg-slate-950 text-slate-450 hover:text-white rounded-lg text-xs font-bold transition-colors cursor-pointer border border-slate-800 flex items-center gap-1 shadow"
                   >
                     <HelpCircle className="h-3.5 w-3.5" />
                     Hint
@@ -199,7 +228,7 @@ export default function CodingPage() {
                   <button
                     onClick={handleSubmitCode}
                     disabled={submittingCode}
-                    className="p-1.5 px-3 bg-white text-slate-950 hover:bg-slate-100 rounded-lg text-[10px] font-bold transition-all duration-200 cursor-pointer shadow flex items-center gap-1"
+                    className="p-1.5 px-3 bg-card text-slate-950 hover:bg-secondary rounded-lg text-xs font-bold transition-all duration-200 cursor-pointer shadow flex items-center gap-1"
                   >
                     {submittingCode ? (
                       <>
@@ -215,13 +244,18 @@ export default function CodingPage() {
                   </button>
                 </div>
 
-                <CodeEditor value={code} onChange={setCode} language={lang} className="flex-1" />
+                <CodeEditor
+                  value={code}
+                  onChange={setCode}
+                  language={lang}
+                  className="flex-1"
+                />
               </div>
 
               {/* Code Review response */}
               {review && (
                 <div
-                  className={`p-6 border rounded-2xl shadow-sm space-y-4 transition-colors ${
+                  className={`p-6 border rounded-xl space-y-4 transition-colors ${
                     review.isCorrect
                       ? "bg-emerald-500/10 border-emerald-500/25"
                       : "bg-red-500/10 border-red-500/25"
@@ -234,14 +268,17 @@ export default function CodingPage() {
                       ) : (
                         <AlertTriangle className="h-4.5 w-4.5 text-red-500 animate-pulse" />
                       )}
-                      Assessment: {review.isCorrect ? "Correct Solution!" : "Logic Flaws Identified"}
+                      Assessment:{" "}
+                      {review.isCorrect
+                        ? "Correct Solution!"
+                        : "Logic Flaws Identified"}
                     </h4>
-                    
+
                     <div className="flex gap-2">
-                      <span className="text-[9px] font-bold bg-slate-950 dark:bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-850 uppercase tracking-wider font-mono">
+                      <span className="text-xs font-bold bg-slate-950 dark:bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-850 uppercase tracking-wider font-mono">
                         Time: {review.timeComplexity}
                       </span>
-                      <span className="text-[9px] font-bold bg-slate-950 dark:bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-850 uppercase tracking-wider font-mono">
+                      <span className="text-xs font-bold bg-slate-950 dark:bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-850 uppercase tracking-wider font-mono">
                         Space: {review.spaceComplexity}
                       </span>
                     </div>
@@ -253,10 +290,10 @@ export default function CodingPage() {
 
                   {review.bugsFound?.length > 0 && (
                     <div className="space-y-1.5">
-                      <span className="text-[9px] font-bold text-red-500 uppercase tracking-wider block">
+                      <span className="text-xs font-bold text-red-500 uppercase tracking-wider block">
                         Identified Logic Issues:
                       </span>
-                      <ul className="list-disc pl-4 text-[10px] text-red-650 dark:text-red-400/90 space-y-1 font-medium leading-relaxed">
+                      <ul className="list-disc pl-4 text-xs text-red-650 dark:text-red-400/90 space-y-1 font-medium leading-relaxed">
                         {review.bugsFound.map((b: string, i: number) => (
                           <li key={i}>{b}</li>
                         ))}
@@ -266,10 +303,10 @@ export default function CodingPage() {
 
                   {review.optimizedSolution && (
                     <div className="space-y-2 pt-2 border-t border-border/40">
-                      <span className="text-[9px] font-bold text-indigo-500 uppercase tracking-wider block">
+                      <span className="text-xs font-bold text-indigo-500 uppercase tracking-wider block">
                         Optimized Reference Solution:
                       </span>
-                      <pre className="p-3.5 bg-slate-950 border border-slate-800 text-slate-200 rounded-xl text-[10px] font-mono whitespace-pre overflow-x-auto leading-relaxed shadow-inner">
+                      <pre className="p-3.5 bg-slate-950 border border-slate-800 text-slate-200 rounded-xl text-xs font-mono whitespace-pre overflow-x-auto leading-relaxed">
                         {review.optimizedSolution}
                       </pre>
                     </div>
@@ -278,14 +315,17 @@ export default function CodingPage() {
               )}
             </div>
           ) : (
-            <div className="bg-card border border-border rounded-2xl p-10 flex flex-col items-center justify-center text-center max-w-sm mx-auto space-y-4 py-16">
-              <div className="p-4 bg-secondary rounded-2xl border border-border/40">
+            <div className="bg-card border border-border rounded-xl p-10 flex flex-col items-center justify-center text-center max-w-sm mx-auto space-y-4 py-16">
+              <div className="p-4 bg-secondary rounded-xl border border-border/40">
                 <Code2 className="h-10 w-10 text-indigo-500 animate-pulse" />
               </div>
-              <h4 className="text-sm font-bold text-foreground">Launch Code Terminal</h4>
+              <h4 className="text-sm font-bold text-foreground">
+                Launch Code Terminal
+              </h4>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Configure topic filters and details on the left, then click Generate. 
-                Our AI Coding Mentor checks algorithmic bounds and complexity indices.
+                Configure topic filters and details on the left, then click
+                Generate. Our AI Coding Mentor checks algorithmic bounds and
+                complexity indices.
               </p>
             </div>
           )}

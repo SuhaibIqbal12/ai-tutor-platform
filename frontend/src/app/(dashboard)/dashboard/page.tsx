@@ -1,14 +1,23 @@
-// frontend/src/app/(dashboard)/dashboard/page.tsx
 "use client";
-import { errorMessage } from "@/lib/contracts";
-
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
-  Sparkles, Brain, Award, BarChart3, Zap, Target, Flame,
-  BookOpen, TrendingUp, Star, Coins, ShieldCheck, AlertCircle, RefreshCw
+  ArrowRight,
+  ArrowUpRight,
+  BookOpen,
+  ListChecks,
+  MessageSquare,
+  CalendarDays,
+  Code2,
+  RefreshCw,
+  Activity,
+  Target,
+  Flame,
+  Library,
 } from "lucide-react";
+import PageHeader from "@/components/PageHeader";
 import { apiRequest } from "@/lib/api";
-
+import { errorMessage } from "@/lib/contracts";
 interface DnaData {
   learningStyle: string;
   currentLevel: string;
@@ -37,364 +46,325 @@ interface AnalyticsData {
   skillGrowthChart: { subject: string; A: number }[];
 }
 
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  subtext,
-  accentClass = "text-indigo-500",
-  iconBg = "bg-indigo-50",
-}: {
-  icon: import("lucide-react").LucideIcon;
-  label: string;
-  value: string | number;
-  subtext?: string;
-  accentClass?: string;
-  iconBg?: string;
-}) {
+const bounded = (value: number) =>
+  Math.max(0, Math.min(100, Number.isFinite(value) ? value : 0));
+function Progress({ label, value }: { label: string; value: number }) {
   return (
-    <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 group relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-transparent to-slate-50/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-      <div className="flex items-start justify-between">
-        <div className={`p-2.5 rounded-xl ${iconBg} mb-3`}>
-          <Icon className={`h-5 w-5 ${accentClass}`} />
-        </div>
+    <div className="progress-row">
+      <div className="progress-row-label">
+        <span>{label}</span>
+        <span className="text-muted-foreground">
+          {Math.round(bounded(value))}%
+        </span>
       </div>
-      <div className={`text-2xl font-black tracking-tight ${accentClass}`}>{value}</div>
-      <div className="text-xs font-bold text-slate-700 mt-1">{label}</div>
-      {subtext && <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">{subtext}</p>}
-    </div>
-  );
-}
-
-function ProgressBar({ label, value, color = "bg-indigo-500" }: { label: string; value: number; color?: string }) {
-  return (
-    <div className="space-y-1.5">
-      <div className="flex justify-between items-center">
-        <span className="text-[11px] font-semibold text-slate-600">{label}</span>
-        <span className="text-[11px] font-black text-slate-800">{Math.round(value)}%</span>
-      </div>
-      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+      <div
+        className="progress-track"
+        role="progressbar"
+        aria-label={label}
+        aria-valuenow={bounded(value)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
         <div
-          style={{ width: `${Math.min(value, 100)}%` }}
-          className={`h-full ${color} rounded-full transition-all duration-700 ease-out`}
+          className="progress-fill"
+          style={{ width: `${bounded(value)}%` }}
         />
       </div>
     </div>
   );
 }
-
 export default function DashboardPage() {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  const fetchStats = async () => {
+  const load = async () => {
     setLoading(true);
     setError("");
     try {
       const res = await apiRequest("/api/analytics/dashboard");
-      if (res.status === "success") {
-        setData(res.data);
-      }
-    } catch (err: unknown) {
-      setError(errorMessage(err) || "Failed to load dashboard statistics.");
+      if (res.status !== "success" || !res.data)
+        throw new Error("We couldn't load your activity.");
+      setData(res.data);
+    } catch (err) {
+      setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
   };
-
   useEffect(() => {
-    void Promise.resolve().then(fetchStats);
+    void Promise.resolve().then(load);
   }, []);
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <div className="relative">
-          <div className="h-12 w-12 border-4 border-indigo-100 border-t-indigo-500 rounded-full animate-spin" />
-          <Brain className="h-5 w-5 text-indigo-500 absolute inset-0 m-auto" />
-        </div>
-        <div className="text-center">
-          <p className="text-sm font-bold text-slate-700">Compiling your learning analytics...</p>
-          <p className="text-xs text-slate-400 mt-1">Analyzing quiz history, mastery scores & DNA profile</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error || !data) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <div className="p-4 bg-red-50 border border-red-100 rounded-2xl">
-          <AlertCircle className="h-10 w-10 text-red-400 mx-auto" />
-        </div>
-        <div className="text-center">
-          <h3 className="text-sm font-bold text-slate-800">Dashboard Sync Error</h3>
-          <p className="text-xs text-slate-500 mt-1 max-w-xs">{error || "Failed to query stats. Please try again."}</p>
-        </div>
-        <button
-          onClick={fetchStats}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors cursor-pointer"
-        >
-          <RefreshCw className="h-3.5 w-3.5" /> Retry
-        </button>
-      </div>
-    );
-  }
-
-  const { dna } = data;
-
+  const metrics = [
+    {
+      label: "Study resources",
+      value: data?.documentsCount,
+      foot: "Material in your library",
+      icon: Library,
+    },
+    {
+      label: "Average quiz score",
+      value: data ? `${Math.round(data.averageScore)}%` : undefined,
+      foot: "Across completed attempts",
+      icon: ListChecks,
+    },
+    {
+      label: "Topics mastered",
+      value: data?.masteredCount,
+      foot: "Based on quiz evaluations",
+      icon: Target,
+    },
+    {
+      label: "Current streak",
+      value: data ? `${data.streak || data.dna.currentStreak} days` : undefined,
+      foot: "Keep building your routine",
+      icon: Flame,
+    },
+  ];
   return (
-    <div className="space-y-6 pb-8">
-      {/* Hero Header */}
-      <div className="bg-gradient-to-r from-indigo-600 via-indigo-500 to-violet-500 rounded-2xl p-6 text-white shadow-lg shadow-indigo-100">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <div className="p-1.5 bg-white/20 rounded-lg">
-                <Brain className="h-4 w-4 text-white" />
-              </div>
-              <span className="text-xs font-bold text-indigo-100 uppercase tracking-widest">Learning Intelligence Hub</span>
-            </div>
-            <h1 className="text-2xl font-black tracking-tight">Your Dashboard</h1>
-            <p className="text-sm text-indigo-200 mt-1 font-medium">
-              Personalized AI Tutor — Adaptive learning powered by your DNA profile
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* XP Pill */}
-            <div className="bg-white/15 border border-white/20 rounded-xl px-4 py-2.5 text-center backdrop-blur-sm">
-              <div className="text-xs text-indigo-200 font-semibold">Level</div>
-              <div className="text-xl font-black text-white">{dna.level}</div>
-            </div>
-            {/* Streak Pill */}
-            <div className="bg-white/15 border border-white/20 rounded-xl px-4 py-2.5 text-center backdrop-blur-sm">
-              <div className="flex items-center gap-1 justify-center mb-0.5">
-                <Flame className="h-3 w-3 text-amber-300" />
-                <span className="text-xs text-indigo-200 font-semibold">Streak</span>
-              </div>
-              <div className="text-xl font-black text-white">{data.streak || dna.currentStreak}d</div>
-            </div>
-            {/* Coins Pill */}
-            <div className="bg-white/15 border border-white/20 rounded-xl px-4 py-2.5 text-center backdrop-blur-sm">
-              <div className="flex items-center gap-1 justify-center mb-0.5">
-                <Coins className="h-3 w-3 text-amber-300" />
-                <span className="text-xs text-indigo-200 font-semibold">Coins</span>
-              </div>
-              <div className="text-xl font-black text-white">{dna.learningCoins}</div>
-            </div>
-          </div>
+    <div>
+      <PageHeader
+        eyebrow="YOUR WORKSPACE"
+        title="A little progress, every day."
+        description="Pick up where you left off, or make room for something new."
+        action={
+          <Link className="button-secondary" href="/sources">
+            <BookOpen size={15} /> Add material
+          </Link>
+        }
+      />
+      <section className="study-banner">
+        <div>
+          <p className="eyebrow">A GOOD PLACE TO START</p>
+          <h2>Turn a question into understanding.</h2>
+          <p>
+            Bring your study material, ask a question, and work through it at
+            your own pace.
+          </p>
         </div>
-
-        {/* XP Bar */}
-        <div className="mt-5">
-          <div className="flex justify-between text-xs text-indigo-200 font-semibold mb-1.5">
-            <span>XP Progress — Level {dna.level}</span>
-            <span>{dna.xp} XP</span>
-          </div>
-          <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden">
-            <div
-              style={{ width: `${Math.min((dna.xp % 1000) / 10, 100)}%` }}
-              className="h-full bg-white/80 rounded-full transition-all duration-700"
-            />
-          </div>
-          <p className="text-[10px] text-indigo-300 mt-1">{1000 - (dna.xp % 1000)} XP to next level</p>
-        </div>
+        <Link className="button-primary shrink-0" href="/tutor">
+          Open your tutor <ArrowRight size={16} />
+        </Link>
+      </section>
+      <div className="stat-grid">
+        {metrics.map((m) => (
+          <section className="panel metric" key={m.label}>
+            <div className="metric-label">
+              <span>{m.label}</span>
+              <m.icon size={15} />
+            </div>
+            <strong
+              className={`metric-value ${loading ? "animate-pulse" : ""}`}
+            >
+              {loading ? "—" : (m.value ?? "—")}
+            </strong>
+            <p className="metric-foot">{m.foot}</p>
+          </section>
+        ))}
       </div>
-
-      {/* Quick Stat Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          icon={TrendingUp}
-          label="Avg. Quiz Score"
-          value={`${data.averageScore}%`}
-          subtext="Average across all attempts"
-          accentClass="text-emerald-600"
-          iconBg="bg-emerald-50"
-        />
-        <StatCard
-          icon={Star}
-          label="Topics Mastered"
-          value={data.masteredCount}
-          subtext="Concepts with STRONG rating"
-          accentClass="text-amber-500"
-          iconBg="bg-amber-50"
-        />
-        <StatCard
-          icon={BookOpen}
-          label="Study Resources"
-          value={data.documentsCount}
-          subtext="Documents indexed in RAG engine"
-          accentClass="text-blue-600"
-          iconBg="bg-blue-50"
-        />
-        <StatCard
-          icon={Zap}
-          label="Learning Velocity"
-          value={`${dna.learningVelocity}x`}
-          subtext="Concept absorption rate vs baseline"
-          accentClass="text-violet-600"
-          iconBg="bg-violet-50"
-        />
-      </div>
-
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* LEFT: Diagnostics */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Learning DNA */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-5">
-              <div className="p-2 bg-indigo-50 rounded-lg">
-                <Brain className="h-4 w-4 text-indigo-600" />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-slate-800">Learning DNA Profile</h3>
-                <p className="text-[10px] text-slate-400">AI-computed biometric learning fingerprint</p>
-              </div>
-              <div className="ml-auto flex items-center gap-2">
-                <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[10px] font-bold border border-indigo-100">
-                  {dna.currentLevel}
-                </span>
-                <span className="px-2.5 py-1 bg-violet-50 text-violet-600 rounded-full text-[10px] font-bold border border-violet-100">
-                  {dna.learningStyle}
-                </span>
-              </div>
-            </div>
-            <div className="space-y-4">
-              <ProgressBar label="Retention Rate" value={dna.retentionRate} color="bg-indigo-500" />
-              <ProgressBar label="Study Consistency" value={dna.studyConsistency} color="bg-emerald-500" />
-              <ProgressBar label="Confidence Level" value={dna.confidenceLevel} color="bg-amber-400" />
-              <ProgressBar label="Placement Readiness" value={dna.placementReadiness} color="bg-violet-500" />
-              <ProgressBar label="Coding Growth Score" value={Math.min(dna.codingGrowthScore, 100)} color="bg-blue-500" />
-            </div>
-          </div>
-
-          {/* Quiz Performance Chart */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="p-2 bg-emerald-50 rounded-lg">
-                <BarChart3 className="h-4 w-4 text-emerald-600" />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-slate-800">Quiz Performance Trend</h3>
-                <p className="text-[10px] text-slate-400">Last 10 quiz attempts — hover for details</p>
-              </div>
-            </div>
-            {data.quizHistoryChart?.length > 0 ? (
-              <div className="h-[180px] flex items-end justify-between gap-2 border-b border-l border-slate-100 pb-2 pl-2">
-                {data.quizHistoryChart.map((q, i) => {
-                  const score = Math.max(q.score, 4);
-                  const color = q.score >= 80 ? "bg-emerald-500 hover:bg-emerald-400" : q.score >= 60 ? "bg-amber-400 hover:bg-amber-300" : "bg-red-400 hover:bg-red-300";
-                  return (
-                    <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
-                      <div
-                        style={{ height: `${score}%` }}
-                        className={`w-full ${color} transition-all duration-300 rounded-t-lg cursor-default relative`}
-                        title={`${q.score}%`}
-                      >
-                        <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[9px] font-black text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                          {q.score}%
-                        </span>
-                      </div>
-                      <span className="text-[8px] text-slate-400 font-mono">Q{i + 1}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <BarChart3 className="h-8 w-8 text-slate-200 mb-3" />
-                <p className="text-xs text-slate-400 font-medium">No quiz data yet</p>
-                <p className="text-[10px] text-slate-300 mt-1">Complete quizzes to see your performance trend</p>
-              </div>
-            )}
-          </div>
+      {error && (
+        <div
+          role="alert"
+          className="auth-error flex items-center justify-between gap-4"
+        >
+          <span>{error}</span>
+          <button className="button-secondary shrink-0" onClick={load}>
+            <RefreshCw size={14} />
+            Retry
+          </button>
         </div>
-
-        {/* RIGHT: AI Coach + Subject Mastery */}
-        <div className="space-y-4">
-          {/* AI Coach Feedback */}
-          <div className="bg-gradient-to-br from-indigo-50 to-violet-50 border border-indigo-100 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="p-1.5 bg-indigo-100 rounded-lg">
-                <Sparkles className="h-4 w-4 text-indigo-600 animate-pulse" />
-              </div>
-              <span className="text-xs font-black text-slate-800">AI Academic Coach</span>
-            </div>
-            <div className="w-full h-px bg-indigo-100 mb-3" />
-            <p className="text-xs leading-relaxed text-slate-700 italic">
-              &ldquo;{data.aiFeedback}&rdquo;
-            </p>
-          </div>
-
-          {/* Subject Mastery */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="p-2 bg-amber-50 rounded-lg">
-                <Award className="h-4 w-4 text-amber-500" />
-              </div>
+      )}
+      <div className="dashboard-grid">
+        <div className="dashboard-column">
+          <section className="panel">
+            <div className="panel-heading">
               <div>
-                <h3 className="text-xs font-black text-slate-800">Subject Mastery</h3>
-                <p className="text-[10px] text-slate-400">From quiz evaluations</p>
+                <h2>Your practice over time</h2>
+                <p>Scores from your last ten quiz attempts</p>
               </div>
+              <Link
+                href="/quizzes"
+                className="text-xs text-primary flex items-center gap-1"
+              >
+                Practice <ArrowUpRight size={13} />
+              </Link>
             </div>
-            {data.skillGrowthChart?.length > 0 ? (
-              <div className="space-y-3">
-                {data.skillGrowthChart.map((skill, i) => {
-                  const colors = ["bg-indigo-500", "bg-emerald-500", "bg-amber-400", "bg-violet-500", "bg-blue-500", "bg-rose-400"];
-                  return (
-                    <div key={i} className="space-y-1">
-                      <div className="flex justify-between text-[10px] font-bold text-slate-700">
-                        <span>{skill.subject}</span>
-                        <span className="text-slate-400 font-mono">{skill.A}%</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          style={{ width: `${skill.A}%` }}
-                          className={`h-full ${colors[i % colors.length]} rounded-full transition-all duration-500`}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+            {loading ? (
+              <div className="empty-state animate-pulse">
+                Loading your activity…
               </div>
-            ) : (
-              <div className="text-center py-8">
-                <Target className="h-8 w-8 text-slate-200 mx-auto mb-2" />
-                <p className="text-xs text-slate-400">Take topic quizzes to track mastery</p>
-              </div>
-            )}
-          </div>
-
-          {/* Badges */}
-          <div className="bg-white border border-slate-100 rounded-2xl p-5 shadow-sm">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="p-1.5 bg-yellow-50 rounded-lg">
-                <ShieldCheck className="h-4 w-4 text-yellow-500" />
-              </div>
-              <span className="text-xs font-black text-slate-800">Achievement Badges</span>
-            </div>
-            {dna.badges?.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {dna.badges.map((badge, i) => (
-                  <span key={i} className="px-2.5 py-1 bg-amber-50 text-amber-600 rounded-full text-[10px] font-bold border border-amber-100">
-                    🏆 {badge}
-                  </span>
+            ) : data?.quizHistoryChart?.length ? (
+              <div
+                className="chart-grid"
+                role="list"
+                aria-label="Recent quiz scores"
+              >
+                {data.quizHistoryChart.map((q, i) => (
+                  <div
+                    className="chart-column"
+                    key={i}
+                    role="listitem"
+                    aria-label={`${q.name || `Quiz ${i + 1}`}: ${q.score}%`}
+                  >
+                    <div
+                      className="chart-bar"
+                      style={{ height: `${bounded(q.score)}%` }}
+                      title={`${q.name}: ${q.score}%`}
+                    />
+                    <small>{Math.round(q.score)}%</small>
+                  </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-6">
-                <p className="text-xs text-slate-400">Complete challenges to earn badges</p>
-                <div className="flex justify-center gap-2 mt-3 opacity-30">
-                  {["🎯", "🚀", "⚡", "🏆"].map((e, i) => (
-                    <span key={i} className="text-lg grayscale">{e}</span>
-                  ))}
-                </div>
+              <div className="empty-state">
+                <Activity size={27} />
+                <strong>Your progress starts with practice.</strong>
+                <p>Complete a quiz to see your scores here.</p>
+                <Link href="/quizzes" className="button-secondary">
+                  Take your first quiz <ArrowRight size={14} />
+                </Link>
               </div>
             )}
-          </div>
+            <p className="text-xs text-muted-foreground px-6 py-4 border-t border-border mt-5">
+              Every attempt is a chance to see what needs another look.
+            </p>
+          </section>
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <h2>What you’re learning</h2>
+                <p>Topic mastery from your quiz evaluations</p>
+              </div>
+              <Target size={17} className="text-muted-foreground" />
+            </div>
+            {data?.skillGrowthChart?.length ? (
+              <div className="pb-5">
+                {data.skillGrowthChart.map((skill) => (
+                  <Progress
+                    key={skill.subject}
+                    label={skill.subject}
+                    value={skill.A}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <strong>No topics to show yet.</strong>
+                <p>Your completed quizzes will build this picture.</p>
+              </div>
+            )}
+          </section>
+        </div>
+        <div className="dashboard-column">
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <h2>Choose your next step</h2>
+                <p>A focused session goes a long way.</p>
+              </div>
+            </div>
+            {[
+              {
+                href: "/sources",
+                title: "Build your library",
+                sub: "Add notes, chapters or a lecture",
+                icon: BookOpen,
+              },
+              {
+                href: "/tutor",
+                title: "Work through a question",
+                sub: "Learn with explanations and examples",
+                icon: MessageSquare,
+              },
+              {
+                href: "/coding",
+                title: "Practice your code",
+                sub: "Solve a challenge and get feedback",
+                icon: Code2,
+              },
+              {
+                href: "/planner",
+                title: "Make a study plan",
+                sub: "Give your next week some structure",
+                icon: CalendarDays,
+              },
+            ].map((item) => (
+              <Link key={item.href} href={item.href} className="quick-action">
+                <item.icon size={19} />
+                <div>
+                  <strong>{item.title}</strong>
+                  <small>{item.sub}</small>
+                </div>
+                <ArrowUpRight size={15} />
+              </Link>
+            ))}
+          </section>
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <h2>Learning notes</h2>
+                <p>Feedback based on your recent activity</p>
+              </div>
+            </div>
+            <p className="px-6 pb-6 text-sm text-muted-foreground leading-7">
+              {data?.aiFeedback ||
+                "Complete a few practice sessions to start receiving feedback on what to revisit."}
+            </p>
+          </section>
+          {data && (
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Your learning profile</h2>
+                  <p>
+                    {data.dna.currentLevel} · {data.dna.learningStyle}
+                  </p>
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  Level {data.dna.level}
+                </span>
+              </div>
+              <Progress
+                label="Study consistency"
+                value={data.dna.studyConsistency}
+              />
+              <Progress
+                label="Retention estimate"
+                value={data.dna.retentionRate}
+              />
+              <Progress
+                label="Confidence estimate"
+                value={data.dna.confidenceLevel}
+              />
+              <Progress
+                label="Career readiness estimate"
+                value={data.dna.placementReadiness}
+              />
+              <Progress
+                label="Coding growth estimate"
+                value={data.dna.codingGrowthScore}
+              />
+              <p className="text-xs text-muted-foreground px-6 py-4">
+                These are learning signals, not measured outcomes.
+              </p>
+              <div className="border-t border-border px-6 py-4 flex gap-5 text-xs text-muted-foreground">
+                <span>{data.dna.xp} XP</span>
+                <span>{data.dna.learningCoins} coins</span>
+                <span>{data.dna.learningVelocity}× velocity</span>
+              </div>
+              {data.dna.badges?.length > 0 && (
+                <div className="px-6 pb-5 flex flex-wrap gap-2">
+                  {data.dna.badges.map((b) => (
+                    <span
+                      key={b}
+                      className="bg-secondary text-xs px-2 py-1 rounded"
+                    >
+                      {b}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
         </div>
       </div>
     </div>
