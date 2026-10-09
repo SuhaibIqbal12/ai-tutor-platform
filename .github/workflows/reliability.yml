@@ -8,11 +8,6 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    services:
-      redis:
-        image: redis:7
-        ports: ['6379:6379']
-        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,6 +17,12 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             frontend/package-lock.json
+      - name: Start isolated test Redis
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y redis-server
+          redis-server --port 6379 --bind 127.0.0.1 --save "" --appendonly no --daemonize yes
+          redis-cli ping
       - run: npm ci
       - run: npm test
         env:
