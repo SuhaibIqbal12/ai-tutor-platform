@@ -32,3 +32,11 @@ test('Groq rejects empty completions and preserves safe quota/auth errors',async
  for(const [status,expected] of [[429,429],[401,503]]){axios.post=async()=>{throw {response:{status,data:{error:'private-provider-detail'}}}};await assert.rejects(model.generateContent('x'),e=>e.statusCode===expected&&!e.message.includes('private-provider-detail'));}
  }finally{axios.post=original}
 });
+
+test('Grounding normalizes citation formatting without accepting invented IDs',()=>{
+ const {withVerifiedReferences}=require('../dist/rag/grounding');
+ const sources=[{id:1,title:'Learning PDF',pageNumber:1}];
+ assert.match(withVerifiedReferences('720 mAh [Source#1]',sources),/Source #1.*Learning PDF, page 1/s);
+ assert.throws(()=>withVerifiedReferences('720 [Source2]',sources),/unsupported/);
+ assert.throws(()=>withVerifiedReferences('720 mAh',sources),/no supporting/);
+});

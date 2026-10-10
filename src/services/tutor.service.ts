@@ -474,7 +474,9 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
         return { response: NO_EVIDENCE, conversationId: activeConversationId };
       }
       const promptWithContext = evidence ? `Retrieved evidence (JSON lines):\n${evidence.context}\n\nQuestion: ${question}` : question;
-      const systemInstruction = await this.buildSystemInstruction(userId, activeSubject) + (ragMode ? '\n' + GROUNDING_INSTRUCTION : '');
+      const systemInstruction = ragMode
+        ? GROUNDING_INSTRUCTION + '\nAnswer the student question directly and concisely. Include the exact supporting [Source #N] citation. Do not add unrelated teaching sections.'
+        : await this.buildSystemInstruction(userId, activeSubject);
 
       let responseText = '';
 
@@ -496,7 +498,7 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
         conversationId: activeConversationId,
       };
     } catch (error: any) {
-      console.error('Gemini/Database Error in Tutor Service:');
+      console.error('Tutor request failed:', error instanceof AppError ? 'operational error' : /source reference/.test(error.message || '') ? 'source citation validation failed' : 'database or response validation failed');
       this.handleGeminiError(error);
     }
   }
@@ -527,7 +529,9 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
         return { stream: refusal(), conversationId: activeConversationId };
       }
       const promptWithContext = evidence ? `Retrieved evidence (JSON lines):\n${evidence.context}\n\nQuestion: ${question}` : question;
-      const systemInstruction = await this.buildSystemInstruction(userId, activeSubject) + (ragMode ? '\n' + GROUNDING_INSTRUCTION : '');
+      const systemInstruction = ragMode
+        ? GROUNDING_INSTRUCTION + '\nAnswer the student question directly and concisely. Include the exact supporting [Source #N] citation. Do not add unrelated teaching sections.'
+        : await this.buildSystemInstruction(userId, activeSubject);
       // Buffer document-mode output until source IDs have been checked. General tutoring remains streamed.
       if (evidence) {
         const response = history.length ? await aiClient.startChat(history, systemInstruction).sendMessage(promptWithContext) : await aiClient.generateContent(promptWithContext, systemInstruction);
