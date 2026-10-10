@@ -79,6 +79,9 @@ export function setStoredEmail(email: string) {
 
 export function clearStoredAuth() {
   if (typeof window !== "undefined") {
+    const email = localStorage.getItem("email");
+    if (email) localStorage.removeItem(`tutor-active:${email}`);
+    sessionStorage.removeItem("pendingTutorRequest");
     localStorage.removeItem("token");
     localStorage.removeItem("email");
     localStorage.removeItem("profile");
@@ -140,6 +143,7 @@ export function setupStreamingTutor({
   ragMode,
   subject,
   documentId,
+  explanationMode,
   onMeta,
   onContent,
   onError,
@@ -150,6 +154,7 @@ export function setupStreamingTutor({
   ragMode: boolean;
   subject: string;
   documentId?: string;
+  explanationMode?: string;
   onMeta: (metadata: { conversationId: string }) => void;
   onContent: (text: string) => void;
   onError: (message: string) => void;
@@ -170,6 +175,7 @@ export function setupStreamingTutor({
           ragMode,
           subject,
           documentId,
+          explanationMode,
         }),
         signal: controller.signal,
       });
@@ -234,4 +240,13 @@ export async function getSystemLogs() {
 
 export async function getDocumentProgress(documentId: string) {
   return apiRequest(`/api/rag/progress/${documentId}`);
+}
+
+export async function uploadResume(file: File, targetRole: string) {
+  if (file.size > 4 * 1024 * 1024) throw new Error('Select a resume smaller than 4 MiB.');
+  const body = new FormData(); body.append('file',file); body.append('targetRole',targetRole);
+  const response = await fetch('/api/placement/resume/upload', { method: 'POST', headers: { Authorization: `Bearer ${getStoredToken()}` }, body });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.message || 'Resume analysis failed.');
+  return result;
 }

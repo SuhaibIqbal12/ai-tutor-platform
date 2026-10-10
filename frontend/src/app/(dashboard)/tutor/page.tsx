@@ -34,6 +34,7 @@ import {
   apiRequest,
   DocumentSource,
   Message,
+  getStoredEmail,
 } from "@/lib/api";
 import { formatExplanations } from "@/components/CollapsiblePanel";
 
@@ -191,6 +192,11 @@ const SUBJECTS = [
   },
 ];
 
+const activeStreams = new Set<string>();
+const MODES = [["step_by_step","Step by step"],["concise","Short answer"],["deep_dive","Deep explanation"],["example","Worked example"],["visual","Visual analogy"],["practice","Practice question"],["mistakes","Common mistakes"],["interview","Interview preparation"],["exam","Exam preparation"],["revision","Revision"],["memory","Memory and recall"]];
+type SavedChat = { messages: Message[]; conversationId: string; subject: string; documentId: string; ragEnabled: boolean; mode: string; input: string; pending?: boolean };
+type HistoryChat = { id: string; title: string; subject: string; updatedAt: string };
+
 const SUBJECT_GROUPS = [
   "General",
   "BTech Core",
@@ -206,6 +212,66 @@ export default function TutorPage() {
   const [ragEnabled, setRagEnabled] = useState(false);
   const [conversationId, setConversationId] = useState("");
   const [documentId, setDocumentId] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [mode, setMode] = useState("step_by_step");
+  const [initialized, setInitialized] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<HistoryChat[]>([]);
+  const [historySearch, setHistorySearch] = useState("");
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null);
+  const [olderCursor, setOlderCursor] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState("");
+  const storageKey = useRef("");
+  const watchingStream = useRef(false);
+  const pendingExplain = useRef(false);
+  const formRef = useRef<HTMLFormElement>(null);
+  const applySaved = (saved: SavedChat) => {
+    setMessages(saved.messages || []); setConversationId(saved.conversationId || "");
+    setSubject(saved.subject || "General"); setDocumentId(saved.documentId || "");
+    setRagEnabled(!!saved.ragEnabled); setMode(saved.mode || "step_by_step"); setInput(saved.input || "");
+    setStreaming(!!saved.pending && activeStreams.has(storageKey.current));
+  };
+  const openConversation = async (id: string, draft = "") => {
+    try {
+      const { data } = await apiRequest(`/api/tutor/conversations/${id}`);
+      applySaved({ ...data, conversationId: data.id, ragEnabled: data.ragMode, mode: data.explanationMode, input: draft });
+      setOlderCursor(data.olderCursor); setHistoryOpen(false); setHistoryError("");
+    } catch (error) { setHistoryError(error instanceof Error ? error.message : "Unable to open conversation."); }
+  };
+  useEffect(() => {
+    storageKey.current = `tutor-active:${getStoredEmail() || "account"}`;
+    let saved: SavedChat | null = null;
+    try { saved = JSON.parse(localStorage.getItem(storageKey.current) || "null"); } catch {}
+    if (saved) { applySaved(saved); watchingStream.current = !!saved.pending && activeStreams.has(storageKey.current); }
+    const handoff = sessionStorage.getItem("pendingTutorRequest");
+    if (handoff) {
+      try { const request = JSON.parse(handoff); setInput(request.question || ""); setDocumentId(request.documentId || ""); setRagEnabled(true); setMode("step_by_step"); pendingExplain.current = true; }
+      catch { setHistoryError("Unable to open selected material. Select it from Study material."); }
+      sessionStorage.removeItem("pendingTutorRequest");
+    } else if (saved?.conversationId && !activeStreams.has(storageKey.current)) {
+      void openConversation(saved.conversationId, saved.input || "").finally(() => setInitialized(true));
+    }
+    if (handoff || !saved?.conversationId || activeStreams.has(storageKey.current)) setInitialized(true);
+    const interval = setInterval(() => {
+      if (watchingStream.current || activeStreams.has(storageKey.current)) {
+        try { const cached = JSON.parse(localStorage.getItem(storageKey.current) || "null"); if (cached) applySaved(cached); watchingStream.current = activeStreams.has(storageKey.current); } catch {}
+      } else { setStreaming(false); }
+    },500);
+    return () => clearInterval(interval);
+    // Restore once; subsequent edits are persisted below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!initialized || activeStreams.has(storageKey.current)) return;
+    try { localStorage.setItem(storageKey.current, JSON.stringify({ messages, conversationId, subject, documentId, ragEnabled, mode, input })); } catch {}
+  },[initialized,messages,conversationId,subject,documentId,ragEnabled,mode,input]);
+  const loadHistory = async (cursor?: string) => {
+    try {
+      const { data } = await apiRequest(`/api/tutor/conversations?search=${encodeURIComponent(historySearch)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
+      setHistory(previous => cursor ? [...previous,...data.conversations] : data.conversations);
+      setHistoryCursor(data.nextCursor); setHistoryError("");
+    } catch (error) { setHistoryError(error instanceof Error ? error.message : "Unable to load history."); }
+  };
   const [readySources, setReadySources] = useState<DocumentSource[]>([]);
   useEffect(() => {
     apiRequest("/api/rag/documents")
@@ -218,7 +284,6 @@ export default function TutorPage() {
       )
       .catch(() => {});
   }, []);
-  const [streaming, setStreaming] = useState(false);
   const [showSubjectPicker, setShowSubjectPicker] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const subjectPickerRef = useRef<HTMLDivElement>(null);
@@ -247,7 +312,7 @@ export default function TutorPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || streaming) return;
+    if (!input.trim() || streaming || !initialized) return;
 
     const userQuestion = input;
     setInput("");
@@ -265,18 +330,29 @@ export default function TutorPage() {
     ]);
 
     let receivedText = "";
+    let activeId = conversationId;
+    const cacheKey = storageKey.current;
+    activeStreams.add(cacheKey); watchingStream.current = true;
+    const cacheResponse = (pending: boolean, content: string) => {
+      try { localStorage.setItem(cacheKey, JSON.stringify({ messages: [...updatedMessages,{ role: "model", content }], conversationId: activeId, subject, documentId, ragEnabled, mode, input: "", pending })); } catch {}
+    };
+    cacheResponse(true,"...");
 
     const cleanup = setupStreamingTutor({
+      explanationMode: mode,
       question: userQuestion,
       conversationId,
       ragMode: ragEnabled,
       subject,
       documentId: documentId || undefined,
       onMeta: (meta) => {
+        activeId = meta.conversationId;
+        cacheResponse(true, receivedText || "...");
         setConversationId(meta.conversationId);
       },
       onContent: (text) => {
         receivedText += text;
+        cacheResponse(true,receivedText);
         setMessages((prev) => {
           const next = [...prev];
           next[next.length - 1] = { role: "model", content: receivedText };
@@ -284,6 +360,7 @@ export default function TutorPage() {
         });
       },
       onError: (err) => {
+        cacheResponse(false,`⚠️ Connection issue: ${err}`); activeStreams.delete(cacheKey);
         cleanup();
         setStreaming(false);
         setMessages((prev) => {
@@ -296,12 +373,20 @@ export default function TutorPage() {
         });
       },
       onDone: () => {
+        cacheResponse(false,receivedText); activeStreams.delete(cacheKey);
         cleanup();
         setStreaming(false);
         setTimeout(() => inputRef.current?.focus(), 100);
       },
     });
   };
+
+  useEffect(() => {
+    if (initialized && pendingExplain.current && input.trim()) {
+      pendingExplain.current = false;
+      formRef.current?.requestSubmit();
+    }
+  },[initialized,input]);
 
   const handleLaunchQuiz = (topic: string) => {
     sessionStorage.setItem("pendingQuizTopic", topic);
@@ -334,6 +419,8 @@ export default function TutorPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
+          <button type="button" disabled={streaming} onClick={() => { setHistoryOpen(!historyOpen); void loadHistory(); }} className="px-3 py-2 border rounded-lg text-xs">History</button>
+          <button type="button" disabled={streaming} onClick={() => { setMessages([]); setConversationId(""); setInput(""); setOlderCursor(null); }} className="px-3 py-2 border rounded-lg text-xs">New chat</button>
           {/* Subject Picker */}
           <div className="relative" ref={subjectPickerRef}>
             <button
@@ -517,7 +604,7 @@ export default function TutorPage() {
                       <div className="border-t border-border pt-3 mt-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                         <span className="text-xs text-muted-foreground italic flex items-center gap-1.5">
                           <Sparkles className="h-3 w-3 text-amber-400" />
-                          Ready to test your understanding?
+                          Choose your next step below, or ask a follow-up.
                         </span>
                         <button
                           type="button"
@@ -545,8 +632,33 @@ export default function TutorPage() {
         <div ref={chatEndRef} />
       </div>
 
+      {historyOpen && <section aria-label="Chat history" className="border-t p-4 max-h-72 overflow-auto bg-card space-y-2">
+        <form onSubmit={(event) => { event.preventDefault(); void loadHistory(); }} className="flex gap-2">
+          <input aria-label="Search chat history" value={historySearch} onChange={event => setHistorySearch(event.target.value)} placeholder="Search subjects or topics" className="border rounded p-2 flex-1" />
+          <button className="border rounded px-3">Search</button>
+        </form>
+        {historyError && <p role="alert">{historyError}</p>}
+        {!history.length && <p className="text-sm text-muted-foreground">No saved conversations found.</p>}
+        {history.map(chat => <button key={chat.id} type="button" onClick={() => void openConversation(chat.id)} className="block text-left w-full p-2 border rounded hover:bg-secondary"><strong className="text-sm">{chat.title}</strong><span className="block text-xs text-muted-foreground">{chat.subject} · {new Date(chat.updatedAt).toLocaleString()}</span></button>)}
+        {historyCursor && <button type="button" onClick={() => void loadHistory(historyCursor)}>Load more conversations</button>}
+      </section>}
+      {olderCursor && <button type="button" className="text-xs p-2 border-t" onClick={async () => {
+        try { const { data } = await apiRequest(`/api/tutor/conversations/${conversationId}?before=${olderCursor}`); setMessages(previous => [...data.messages,...previous]); setOlderCursor(data.olderCursor); }
+        catch (error) { setHistoryError(error instanceof Error ? error.message : "Unable to load older messages."); }
+      }}>Load older messages</button>}
       {/* Input Bar */}
       <div className="border-t border-border p-4 shrink-0 bg-card">
+        <label className="block text-xs mb-3">Explanation style
+          <select aria-label="Explanation style" value={mode} disabled={streaming} onChange={event => setMode(event.target.value)} className="ml-2 border rounded p-2 bg-background">
+            {MODES.map(([value,label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        {messages.length > 0 && !streaming && <div className="flex flex-wrap gap-2 mb-3" aria-label="Choose next explanation">
+          {[["example","Worked example"],["visual","Visual analogy"],["practice","Practice question"],["revision","Revision"],["interview","Interview preparation"]].map(([value,label]) => <button key={value} type="button" className="text-xs border rounded-lg px-3 py-2 hover:bg-secondary" onClick={() => {
+            const topic = [...messages].reverse().find(message => message.role === "user")?.content || "this topic";
+            setMode(value); setInput(`${label}: ${topic}`); inputRef.current?.focus();
+          }}>{label}</button>)}
+        </div>}
         {/* Active subject badge */}
         <div className="flex items-center gap-2 mb-2.5">
           <div
@@ -586,13 +698,13 @@ export default function TutorPage() {
             </select>
           </label>
         )}
-        <form onSubmit={handleSubmit} className="flex gap-2.5">
+        <form ref={formRef} onSubmit={handleSubmit} className="flex gap-2.5">
           <input
             ref={inputRef}
             aria-label="Your question"
             type="text"
             required
-            disabled={streaming}
+            disabled={streaming || !initialized}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={

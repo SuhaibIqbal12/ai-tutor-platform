@@ -1,6 +1,8 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { TutorService } from '../services/tutor.service';
+import { prisma } from '../config/prisma';
+import { teachingMode } from '../services/teaching-policy';
 import { AppError } from '../middleware/error.middleware';
 
 const tutorService = new TutorService();
@@ -14,7 +16,7 @@ export const askQuestion = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { question, conversationId, ragMode, subject, documentId } = req.body;
+    const { question, conversationId, ragMode, subject, documentId, explanationMode } = req.body;
     const userId = req.user?.id;
 
     if (!userId) {
@@ -26,7 +28,7 @@ export const askQuestion = async (
     }
 
     const { response, conversationId: activeConversationId } =
-      await tutorService.getTutoringResponse(userId, question, conversationId, !!ragMode, subject ? String(subject) : undefined, documentId ? String(documentId) : undefined);
+      await tutorService.getTutoringResponse(userId, question, conversationId, !!ragMode, subject ? String(subject) : undefined, documentId ? String(documentId) : undefined, teachingMode(explanationMode));
 
     res.status(200).json({
       status: 'success',
@@ -49,7 +51,7 @@ export const askQuestionStream = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { question, conversationId, ragMode, subject, documentId } = req.method === 'POST' ? req.body : req.query;
+    const { question, conversationId, ragMode, subject, documentId, explanationMode } = req.method === 'POST' ? req.body : req.query;
     const userId = req.user?.id;
 
     if (!userId) {
@@ -84,7 +86,7 @@ export const askQuestionStream = async (
       convId,
       isRag,
       subjStr,
-      documentId ? String(documentId) : undefined
+      documentId ? String(documentId) : undefined, teachingMode(explanationMode)
     );
 
     // Write initial meta message containing conversationId
@@ -109,4 +111,26 @@ export const askQuestionStream = async (
       });
     }
   }
+};
+
+export const listConversations = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const search = String(req.query.search || '').slice(0,200);
+    const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+    if (cursor && !await prisma.conversation.findFirst({ where: { id: cursor, userId: req.user!.id } })) throw new AppError('Conversation not found.',404);
+    const rows = await prisma.conversation.findMany({ where: { userId: req.user!.id, messages: { some: {} }, ...(search ? { OR: [{ title: { contains: search, mode: 'insensitive' } }, { subject: { contains: search, mode: 'insensitive' } }, { messages: { some: { content: { contains: search, mode: 'insensitive' } } } }] } : {}) },
+      orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }], take: 51, ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: { id: true, title: true, subject: true, updatedAt: true, ragMode: true, documentId: true, explanationMode: true, _count: { select: { messages: true } } } });
+    res.json({ status: 'success', data: { conversations: rows.slice(0,50), nextCursor: rows.length > 50 ? rows[49].id : null } });
+  } catch (error) { next(error); }
+};
+export const getConversation = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const conversation = await prisma.conversation.findFirst({ where: { id: req.params.id, userId: req.user!.id } });
+    if (!conversation) throw new AppError('Conversation not found.',404);
+    const before = req.query.before ? String(req.query.before) : undefined;
+    if (before && !await prisma.message.findFirst({ where: { id: before, conversationId: conversation.id } })) throw new AppError('Message not found.',404);
+    const rows = await prisma.message.findMany({ where: { conversationId: conversation.id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 101, ...(before ? { cursor: { id: before }, skip: 1 } : {}) });
+    res.json({ status: 'success', data: { ...conversation, messages: rows.slice(0,100).reverse(), olderCursor: rows.length > 100 ? rows[99].id : null } });
+  } catch (error) { next(error); }
 };

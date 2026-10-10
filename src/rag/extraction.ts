@@ -45,14 +45,16 @@ export async function extract(input: DocumentInput): Promise<Extraction> {
   } else if (input.fileType === 'YOUTUBE') {
     const id = youtubeId(await validatePublicUrl(input.url || ''));
     if (!id) throw new AppError('Invalid YouTube URL.', 400);
-    try {
+    if (input.content?.trim()) {
+      result = { segments: [{ text: input.content }] };
+    } else try {
       const { YoutubeTranscript } = require('youtube-transcript');
       const entries = await YoutubeTranscript.fetchTranscript(id);
       if (!entries?.length) throw new Error('No transcript');
       // youtube-transcript offsets are seconds. Preserve the original evidence timestamps.
       result = { segments: entries.map((e: any) => ({ text: e.text, timestamp: Number(e.offset) })) };
     } catch {
-      if (process.env.YOUTUBE_FALLBACK_ENABLED !== 'true') throw new AppError('Captions could not be accessed for this video. Paste its transcript as notes or upload a text transcript instead.', 422);
+      if (process.env.YOUTUBE_FALLBACK_ENABLED !== 'true') throw new AppError('Captions could not be accessed for this video. Open the video’s Show transcript option and paste its transcript in Add link. Videos without accessible captions require a transcript before they can be explained.', 422);
       const dir = await mkdtemp(path.join(tmpdir(), 'tutor-video-'));
       try {
         await runFile(process.env.PYTHON_BIN || 'python', ['-m','yt_dlp','--skip-download','--write-auto-subs','--write-subs','--sub-lang','en','--sub-format','vtt','--output',path.join(dir,'captions'),`https://www.youtube.com/watch?v=${id}`], { timeout: 120000, maxBuffer: 1024*1024 });

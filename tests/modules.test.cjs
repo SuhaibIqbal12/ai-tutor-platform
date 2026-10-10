@@ -127,3 +127,43 @@ test('legacy quiz retains operational quota status and masks unexpected provider
     assert.ok(!JSON.stringify(failed.data).includes('secret-placeholder'));
   } finally { provider.getModel = savedModel; }
 });
+test('history restores legacy OS discussions, persisted source/style, pagination and ownership', async () => {
+  const c = await prisma.conversation.create({ data: { userId, subject: 'OperatingSystems', title: 'Round robin', ragMode: true, documentId: 'selected-source', explanationMode: 'visual' } });
+  const service = new (require('../dist/services/tutor.service').TutorService)();
+  await service.saveMessages(c.id, 'Explain round robin scheduling', 'CPU scheduling rotates between ready processes.');
+  const list = await request('/api/tutor/conversations?search=round');
+  assert.equal(list.status,200); assert.ok(list.data.data.conversations.some(row => row.id === c.id));
+  const detail = await request('/api/tutor/conversations/' + c.id);
+  assert.equal(detail.data.data.messages.length,2); assert.equal(detail.data.data.documentId,'selected-source'); assert.equal(detail.data.data.explanationMode,'visual');
+  const outsider = await prisma.user.create({ data: { email: 'history-other@example.test', password: 'irrelevant' } });
+  const privateChat = await prisma.conversation.create({ data: { userId: outsider.id, title: 'Private' } });
+  assert.equal((await request('/api/tutor/conversations/' + privateChat.id)).status,404);
+  assert.equal((await request('/api/tutor/conversations?cursor=' + privateChat.id)).status,404);
+  for (let i=0;i<103;i++) await prisma.message.create({ data: { conversationId: c.id, role: 'user', content: 'History ' + i, createdAt: new Date(Date.now()+i+100) } });
+  const first = await request('/api/tutor/conversations/' + c.id);
+  assert.equal(first.data.data.messages.length,100); assert.ok(first.data.data.olderCursor);
+  const second = await request('/api/tutor/conversations/' + c.id + '?before=' + first.data.data.olderCursor);
+  assert.equal(second.data.data.messages.length,5);
+  const recall = await request('/api/tutor/ask', { question: 'Can you recall my old topics?' });
+  assert.equal(recall.status,200); assert.match(recall.data.data.response,/OperatingSystems/); assert.match(recall.data.data.response,/Round robin/);
+});
+test('invalid teaching mode fails before saving a new conversation; selected practice mode stays focused', async () => {
+  const { teachingPolicy } = require('../dist/services/teaching-policy');
+  assert.match(teachingPolicy('practice'), /one/i); assert.match(teachingPolicy('step_by_step'), /why/i);
+  const count = await prisma.conversation.count();
+  assert.equal((await request('/api/tutor/ask',{ question: 'Explain OS', explanationMode: 'invalid' })).status,400);
+  assert.equal(await prisma.conversation.count(),count);
+});
+test('resume file extraction succeeds and malformed files do not alter scores', async () => {
+  responseValue = { atsScore: 81, feedback: 'Add concrete outcomes.', improvements: ['Quantify outcomes where supported.'], skillsIdentified: ['Python'], missingKeywords: ['Testing'] };
+  for (const fixture of ['txt','docx','xlsx','odt']) {
+    const form = new FormData();
+    const content = fixture === 'txt' ? Buffer.from('Python developer with PostgreSQL projects and automated tests.') : require('node:fs').readFileSync(require('node:path').join(__dirname,'fixtures','resume.'+fixture));
+    form.append('file',new Blob([content]),'resume.'+fixture); form.append('targetRole','Backend Engineer');
+    const res = await fetch(origin+'/api/placement/resume/upload',{ method:'POST',headers:{ Authorization:`Bearer ${token}` },body:form });
+    assert.equal(res.status,200,fixture); assert.equal((await res.json()).data.analysis.atsScore,81);
+  }
+  const form = new FormData(); form.append('file',new Blob(['not a pdf']),'resume.pdf');
+  assert.equal((await fetch(origin+'/api/placement/resume/upload',{ method:'POST',headers:{ Authorization:`Bearer ${token}` },body:form })).status,422);
+  assert.equal((await prisma.placementProfile.findUnique({where:{userId}})).atsScore,81);
+});

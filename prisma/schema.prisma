@@ -112,6 +112,10 @@ model UserProfile {
 }
 
 model Conversation {
+  @@index([userId, updatedAt])
+  ragMode Boolean @default(false)
+  documentId String?
+  explanationMode String @default("step_by_step")
   id        String    @id @default(uuid())
   title     String    // Auto-generated topic name
   subject   String?   @default("General")

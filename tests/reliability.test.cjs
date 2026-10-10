@@ -214,3 +214,19 @@ test('safe provider errors distinguish quota, credentials and outage without lea
   assert.equal(providerFailure({ status:500 }).statusCode, 502);
   assert.ok(!providerFailure({ status:500, message:'secret=do-not-print' }).message.includes('do-not-print'));
 });
+test('selected-material overview samples genuine source chunks without relaxing unrelated-query gating', async () => {
+  const rag = new RagService();
+  const overview = await rag.retrieve(userId,'Explain the selected material',doc.id);
+  assert.ok(overview.sources.length); assert.ok(overview.sources.every(source => source.documentId === doc.id));
+  assert.match(overview.context,/sampled excerpts/);
+  assert.equal((await rag.retrieve(userId,'What is the tuition fee of Harvard?',doc.id)).sources.length,0);
+});
+test('video transcript fallback retains the real provided text and does not synthesize missing audio', async () => {
+  const { extract } = require('../dist/rag/extraction');
+  const dns = require('node:dns/promises'); const originalLookup = dns.lookup;
+  dns.lookup = async () => [{address:'8.8.8.8',family:4}];
+  try {
+    const result = await extract({fileType:'YOUTUBE',url:'https://youtu.be/BgJyHxXWbz4',content:'CUDA runs parallel kernels on a GPU. Threads are grouped into blocks.'});
+    assert.match(result.segments[0].text,/parallel kernels/);
+  } finally { dns.lookup = originalLookup; }
+});

@@ -93,7 +93,10 @@ export const uploadDocumentUrl = async (req: AuthenticatedRequest, res: Response
     const url = await validatePublicUrl(req.body.url);
     const id = youtubeId(url);
     const source = id ? `https://www.youtube.com/watch?v=${id}` : url.href;
-    await enqueue(req, res, { url: source, title: source.slice(0,200), fileType: id ? 'YOUTUBE' : 'WEB' }, hash(source));
+    const transcript = req.body.transcript;
+    if (transcript !== undefined && (typeof transcript !== 'string' || !transcript.trim() || transcript.length > 500000)) throw new AppError('Provide nonempty transcript text up to 500,000 characters.',400);
+    if (transcript && !id) throw new AppError('A transcript can only be attached to a YouTube URL.',400);
+    await enqueue(req, res, { url: source, title: source.slice(0,200), fileType: id ? 'YOUTUBE' : 'WEB', ...(transcript ? { content: transcript } : {}) }, hash(source + (transcript ? '\n' + transcript : '')));
   } catch (error) { next(error); }
 };
 export const getDocuments = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {

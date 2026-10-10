@@ -10,6 +10,7 @@ import type {
 } from "@/lib/contracts";
 import { errorMessage } from "@/lib/contracts";
 
+import { uploadResume } from "@/lib/api";
 import React, { useState } from "react";
 import {
   Compass,
@@ -63,7 +64,7 @@ export default function CareerPage() {
   const [customSkills, setCustomSkills] = useState("");
   const [roadmap, setRoadmap] = useState<Roadmap | null>(null);
   const [resumeRole, setResumeRole] = useState("Software Engineer");
-  const [resumeText, setResumeText] = useState("");
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [resumeAnalysis, setResumeAnalysis] = useState<ResumeAnalysis | null>(
     null,
   );
@@ -107,14 +108,11 @@ export default function CareerPage() {
   };
 
   const handleAnalyzeResume = async () => {
-    if (!resumeText.trim()) return;
+    if (!resumeFile) return;
     setLoading(true);
     setResumeAnalysis(null);
     try {
-      const res = await apiRequest("/api/placement/resume", "POST", {
-        resumeText,
-        targetRole: resumeRole,
-      });
+      const res = await uploadResume(resumeFile, resumeRole);
       if (res.status === "success") setResumeAnalysis(res.data.analysis);
     } catch (err: unknown) {
       notify("Failed: " + errorMessage(err));
@@ -313,7 +311,7 @@ export default function CareerPage() {
                 />
                 <button
                   onClick={handleAnalyzeResume}
-                  disabled={loading || !resumeText.trim()}
+                  disabled={loading || !resumeFile}
                   className="w-full py-2 bg-primary hover:opacity-90 text-primary-foreground rounded-xl text-xs font-bold transition-colors cursor-pointer shadow disabled:opacity-50"
                 >
                   {loading ? "Parsing..." : "Audit Resume Score"}
@@ -321,15 +319,13 @@ export default function CareerPage() {
               </div>
               <div className="md:col-span-2">
                 <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1 mb-1.5">
-                  <FileText className="h-3.5 w-3.5" /> Paste Plain Text Resume
+                  <FileText className="h-3.5 w-3.5" /> Upload your resume
                 </label>
-                <textarea
-                  value={resumeText}
-                  onChange={(e) => setResumeText(e.target.value)}
-                  rows={8}
-                  className="w-full p-3 border border-border bg-secondary/30 rounded-xl text-xs focus:outline-none focus:border-indigo-500 text-foreground"
-                  placeholder="Paste raw text from your PDF resume..."
-                />
+                <input type="file" aria-label="Resume file" accept=".pdf,.docx,.xlsx,.odt,.txt"
+                  onChange={(event) => { setResumeFile(event.target.files?.[0] || null); setResumeAnalysis(null); }}
+                  className="w-full p-4 border border-border rounded-xl" />
+                <p className="text-xs text-muted-foreground mt-3">PDF, Word, Excel, ODT or text · maximum 4 MiB. Scanned PDFs need selectable text. Your score is an advisory assessment against the target role.</p>
+                {resumeFile && <p className="text-sm mt-2">Selected: {resumeFile.name}</p>}
               </div>
             </div>
           </div>

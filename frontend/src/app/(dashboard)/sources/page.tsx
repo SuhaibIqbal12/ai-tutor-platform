@@ -38,6 +38,7 @@ export default function SourcesPage() {
   const [textTitle, setTextTitle] = useState("");
   const [textContent, setTextContent] = useState("");
   const [sourceUrl, setSourceUrl] = useState("");
+  const [videoTranscript, setVideoTranscript] = useState("");
   const [sourceError, setSourceError] = useState("");
   const [documentDetails, setDocumentDetails] = useState<{
     title: string;
@@ -241,6 +242,7 @@ export default function SourcesPage() {
     try {
       const result = await apiRequest("/api/rag/upload-url", "POST", {
         url: sourceUrl,
+        ...(videoTranscript.trim() ? { transcript: videoTranscript } : {}),
       });
       setActiveJobId(result.data.documentId);
       setJobProgress({ stage: result.data.stage });
@@ -287,11 +289,8 @@ export default function SourcesPage() {
     });
   }
 
-  const handleExploreInChat = (nodeLabel: string) => {
-    sessionStorage.setItem(
-      "pendingTutorQuestion",
-      `Explain the topic "${nodeLabel}" in detail. Provide analogies and step-by-step reasoning.`,
-    );
+  const handleExploreInChat = (node: GraphNode) => {
+    sessionStorage.setItem("pendingTutorRequest", JSON.stringify({ question: `Explain ${node.label} from the selected study material, step by step.`, documentId: node.documentId, ragMode: true }));
     router.push("/tutor");
   };
 
@@ -534,6 +533,11 @@ export default function SourcesPage() {
               placeholder="https://..."
               className="w-full p-3 rounded-xl border border-border bg-background"
             />
+            <details className="text-sm border rounded-lg p-3">
+              <summary className="cursor-pointer">YouTube captions unavailable? Add a transcript</summary>
+              <p className="text-xs text-muted-foreground my-2">On YouTube, open the video description and choose Show transcript. Paste the actual transcript below. It stays attached to this video and is used as the evidence for answers. We cannot explain audio that has not been transcribed.</p>
+              <textarea aria-label="YouTube transcript" value={videoTranscript} onChange={event => setVideoTranscript(event.target.value)} rows={6} placeholder="Paste this video's transcript" className="w-full border rounded p-3 bg-background" />
+            </details>
             <button
               disabled={loading}
               className="px-4 py-2 rounded-xl bg-indigo-600 text-white"
@@ -640,6 +644,9 @@ export default function SourcesPage() {
                     {src.title}
                   </span>
                   {src.error && <p className="text-red-500">{src.error}</p>}
+                  {src.status === "READY" && <button type="button" className="text-xs font-semibold text-primary my-2" onClick={() => {
+                    sessionStorage.setItem("pendingTutorRequest", JSON.stringify({question:"Explain the selected material",documentId:src.id,ragMode:true})); router.push("/tutor");
+                  }}>Explain material</button>}
                   {src.status === "READY" && (
                     <button
                       className="text-left text-indigo-500"
@@ -848,7 +855,7 @@ export default function SourcesPage() {
 
                   <button
                     type="button"
-                    onClick={() => handleExploreInChat(selectedNode.label)}
+                    onClick={() => handleExploreInChat(selectedNode)}
                     className="w-full py-2 bg-primary hover:opacity-90 text-primary-foreground rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <MessageSquare className="h-3.5 w-3.5" />

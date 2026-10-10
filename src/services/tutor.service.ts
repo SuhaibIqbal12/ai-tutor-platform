@@ -1,3 +1,4 @@
+import { TeachingMode, teachingMode, teachingPolicy } from './teaching-policy';
 import { aiClient } from '../config/ai.provider';
 import { prisma } from '../config/prisma';
 import { AppError } from '../middleware/error.middleware';
@@ -8,7 +9,7 @@ export class TutorService {
   /**
    * Helper to resolve or create a conversation thread.
    */
-  private async resolveConversation(userId: string, question: string, conversationId?: string, subject?: string) {
+  private async resolveConversation(userId: string, question: string, conversationId?: string, subject?: string, ragMode = false, documentId?: string, explanationMode?: string) {
     let activeConversationId = conversationId;
     let history: { role: 'user' | 'model'; parts: { text: string }[] }[] = [];
     let activeSubject = subject || 'General';
@@ -16,7 +17,7 @@ export class TutorService {
     if (activeConversationId) {
       const conversation = await prisma.conversation.findUnique({
         where: { id: activeConversationId },
-        include: { messages: { orderBy: { createdAt: 'asc' } } },
+        include: { messages: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 30 } },
       });
 
       if (!conversation) {
@@ -27,18 +28,19 @@ export class TutorService {
         throw new AppError('Unauthorized access to this conversation.', 403);
       }
 
-      activeSubject = conversation.subject || 'General';
-      history = conversation.messages.map(msg => ({
+      activeSubject = subject || conversation.subject || 'General';
+      await prisma.conversation.update({ where: { id: conversation.id }, data: { subject: activeSubject, ragMode, documentId: documentId || null, explanationMode: teachingMode(explanationMode) } });
+      history = conversation.messages.reverse().map(msg => ({
         role: (msg.role === 'user' ? 'user' : 'model') as 'user' | 'model',
         parts: [{ text: msg.content }],
-      })).slice(-6);
+      })).slice(-30);
     } else {
       const title = question.length > 40 ? `${question.substring(0, 37)}...` : question;
       const newConversation = await prisma.conversation.create({
         data: {
           title,
           userId,
-          subject: activeSubject,
+          subject: activeSubject, ragMode, documentId, explanationMode: teachingMode(explanationMode),
         },
       });
       activeConversationId = newConversation.id;
@@ -51,22 +53,12 @@ export class TutorService {
    * Save user question and model response to SQLite
    */
   public async saveMessages(conversationId: string, question: string, response: string) {
-    await prisma.message.create({
-      data: {
-        conversationId,
-        role: 'user',
-        content: question,
-      },
-    });
-
-    await prisma.message.create({
-      data: {
-        conversationId,
-        role: 'model',
-        content: response,
-      },
-    });
-    
+    const now = new Date();
+    await prisma.$transaction([
+      prisma.message.create({ data: { conversationId, role: 'user', content: question, createdAt: now } }),
+      prisma.message.create({ data: { conversationId, role: 'model', content: response, createdAt: new Date(now.getTime()+1) } }),
+      prisma.conversation.update({ where: { id: conversationId }, data: { updatedAt: now } })
+    ]);
     // Refusals contain no student insight. Serverless functions cannot reliably
     // finish unawaited work after returning; keep extra inference opt-in there.
     if (response !== NO_EVIDENCE) {
@@ -124,7 +116,7 @@ Ensure your response is valid JSON only.`;
   /**
    * Builds system instruction adapted to student profile and active subject.
    */
-  private async buildSystemInstruction(userId: string, subject: string): Promise<string> {
+  private async buildSystemInstruction(userId: string, subject: string, mode: TeachingMode = 'step_by_step'): Promise<string> {
     const userProfile = await prisma.userProfile.findUnique({
       where: { userId }
     });
@@ -179,42 +171,7 @@ Ensure your response is valid JSON only.`;
     });
     const memoryString = longTermMemories.map(m => `- [${m.category}] ${m.insight}`).join('\n') || 'None recorded yet.';
 
-    const baseInstructions = `You are a patient, highly-skilled, and clear AI Teaching Agent. Your mission is to help students master educational topics.
-
-CRITICAL RULE: You MUST structure your response into exactly the following 11 sections. Use the exact markdown headings below:
-
-### 🟢 1. Simple Explanation
-[Provide a very simple, intuitive, and easy-to-understand explanation using relatable analogies, simple vocabulary, and step-by-step reasoning. Explain it as if teaching a complete beginner. Keep sentences short and vocabulary simple.]
-
-### 🔍 2. Detailed Explanation
-[Provide a comprehensive, technical, and detailed explanation. Explain the formal definitions, underlying mechanics, mathematical proofs, code implementation, or scientific details as appropriate. Use proper academic terminology.]
-
-### 💡 3. Real World Example
-[Provide a concrete, practical, real-world example demonstrating how this concept is applied in everyday life, industry, or research.]
-
-### 🖼️ 4. Visual Analogy
-[Describe a vivid visual analogy or mental picture that helps the student visualize how the concept works. Make it descriptive, graphic, and memorable.]
-
-### ⚠️ 5. Common Mistakes
-[List 2-3 common misconceptions, pitfalls, or mistakes students make when learning or applying this concept, along with how to avoid them.]
-
-### 🏫 6. Exam Perspective
-[Discuss how this concept is tested in academic exams, common question styles, and how to structure answers for maximum marks.]
-
-### 💼 7. Interview Perspective
-[Explain how this topic is typically asked in job or technical interviews, what key points interviewers look for, or how to answer questions about it.]
-
-### 📝 8. Revision Notes
-[Provide a concise bulleted list of the absolute core takeaways for last-minute revision.]
-
-### ❓ 9. Adaptive Quiz
-[Provide a quick 2-question self-assessment (MCQ or short answer) based on the concept explained. Include the correct answers and brief explanations below them.]
-
-### 🛠️ 10. Weakness Analysis
-[Detect potential areas of confusion for the student based on this concept and their past performance, and provide gentle encouragement.]
-
-### ➡️ 11. Next Recommended Topic
-[Suggest the logical next topic they should study to build their mastery, connecting it to their long-term goals.]
+    const baseInstructions = `You are a careful, patient subject tutor. Help the student build independent understanding through clear reasoning and practice.
 
 STUDENT INTEL AND DNA PARAMETERS:
 - Student Learning Level (DNA): ${profile.currentLevel}
@@ -241,7 +198,7 @@ ADAPTATION GUIDELINES:
       // ── GENERAL ──────────────────────────────────────────────────────────────
       General: `Adopt an expert BTech academic & interview tutor persona.
 You cover ALL subjects important for a BTech (CS/IT/ECE) student: DSA, OS, CN, DBMS, System Design, all programming languages (Python, Java, JavaScript, C, C++, HTML/CSS), Machine Learning, and engineering fundamentals.
-Always explain with code examples (multi-language where relevant), complexity analysis, real-world analogies, exam tips, and interview Q&A at the end.`,
+Select examples relevant to the question and requested teaching mode.`,
 
       // ── BTECH CORE ───────────────────────────────────────────────────────────
       Mathematics: `Adopt an expert Engineering Mathematics tutor for BTech students.
@@ -266,7 +223,7 @@ Cover in depth:
 - Memory Management: paging, segmentation, page tables, TLB, virtual memory, demand paging, page replacement (FIFO, LRU, Optimal, Clock), thrashing
 - File Systems: inodes, directory structures, FAT, NTFS, ext4, disk scheduling (SCAN, C-SCAN, LOOK)
 - I/O Systems: interrupt handling, DMA, spooling
-Always include: solved numerical examples, interview questions at the end, common OS interview traps to avoid.`,
+When requested or relevant, include: solved numerical examples, interview questions when requested, common OS interview traps to avoid.`,
 
       ComputerNetworks: `Adopt a world-class Computer Networks interview & exam tutor.
 Cover in depth:
@@ -278,7 +235,7 @@ Cover in depth:
 - Transport Layer: TCP (3-way handshake, 4-way teardown, flow control, congestion control — slow start, congestion avoidance, fast retransmit), UDP, port numbers, multiplexing, socket programming concepts
 - Application Layer: HTTP/HTTPS (methods, status codes, cookies, REST), DNS (resolution process, record types A/MX/CNAME/NS), SMTP/POP3/IMAP, FTP, DHCP, SSH, TLS/SSL handshake
 - Network Security: firewalls, VPNs, symmetric/asymmetric encryption basics
-Always include: subnet calculation walkthroughs, Wireshark-level packet descriptions, interview Q&A at end.`,
+When requested or relevant, include: subnet calculation walkthroughs, Wireshark-level packet descriptions, interview Q&A when requested.`,
 
       DataStructures: `Adopt a world-class DSA (Data Structures & Algorithms) interview tutor — the #1 skill for FAANG/product company placements.
 Cover in depth:
@@ -302,7 +259,7 @@ Cover in depth:
 - Transactions: ACID properties explained deeply, transaction states, concurrency control (2PL, timestamp-based), isolation levels (READ UNCOMMITTED, READ COMMITTED, REPEATABLE READ, SERIALIZABLE), dirty read, phantom read, lost update
 - Indexing: B+ trees, clustered vs non-clustered, composite indexes, when to use/not use indexes, query optimization
 - NoSQL: MongoDB, Redis, Cassandra, HBase — CAP theorem, BASE vs ACID, use cases for each NoSQL type
-Always include: executable SQL queries with expected output, normalization worked examples, interview Q&A.`,
+When requested or relevant, include: executable SQL queries with expected output, normalization worked examples, interview Q&A.`,
 
       // ── PROGRAMMING LANGUAGES ─────────────────────────────────────────────────
       Python: `Adopt a world-class Python expert tutor (for BTech academics, data science, and software engineering interviews).
@@ -446,7 +403,7 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
     };
 
     const modifier = subjectModifiers[subject] || subjectModifiers.General;
-    return `${baseInstructions}\n\nSubject Context: ${modifier}`;
+    return `${baseInstructions}\n\nSubject Context (reference, not a required response checklist): ${modifier}\n\n${teachingPolicy(mode)}`;
   }
 
   /**
@@ -458,7 +415,8 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
     conversationId?: string,
     ragMode = false,
     subject?: string,
-    documentId?: string
+    documentId?: string,
+    explanationMode?: string
   ): Promise<{ response: string; conversationId: string }> {
     if (typeof question !== 'string' || !question.trim() || question.length > 8000) {
       throw new AppError('Question cannot be empty', 400);
@@ -466,8 +424,10 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
 
     try {
       const { activeConversationId, history, subject: activeSubject } = 
-        await this.resolveConversation(userId, question, conversationId, subject);
+        await this.resolveConversation(userId, question, conversationId, subject, ragMode, documentId, explanationMode);
 
+      const recall = await this.recallStudyHistory(userId, question);
+      if (recall) { await this.saveMessages(activeConversationId, question, recall); return { response: recall, conversationId: activeConversationId }; }
       const evidence = ragMode ? await new RagService().retrieve(userId, question, documentId) : undefined;
       if (evidence && !evidence.sources.length) {
         await this.saveMessages(activeConversationId, question, NO_EVIDENCE);
@@ -475,8 +435,8 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
       }
       const promptWithContext = evidence ? `Retrieved evidence (JSON lines):\n${evidence.context}\n\nQuestion: ${question}` : question;
       const systemInstruction = ragMode
-        ? GROUNDING_INSTRUCTION + '\nReturn JSON with answer and sourceIds. sourceIds must use numeric IDs from the retrieved evidence. Answer directly and concisely; do not add unrelated teaching sections.'
-        : await this.buildSystemInstruction(userId, activeSubject);
+        ? teachingPolicy(teachingMode(explanationMode)) + '\n' + GROUNDING_INSTRUCTION + '\nReturn JSON with answer and sourceIds. sourceIds must use numeric IDs from the retrieved evidence. Use the selected teaching mode and answer only from the supplied evidence. Do not add unrelated sections.'
+        : await this.buildSystemInstruction(userId, activeSubject, teachingMode(explanationMode));
 
       let responseText = '';
 
@@ -512,7 +472,8 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
     conversationId?: string,
     ragMode = false,
     subject?: string,
-    documentId?: string
+    documentId?: string,
+    explanationMode?: string
   ): Promise<{ stream: AsyncGenerator<string, void, unknown>; conversationId: string }> {
     if (typeof question !== 'string' || !question.trim() || question.length > 8000) {
       throw new AppError('Question cannot be empty', 400);
@@ -520,8 +481,10 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
 
     try {
       const { activeConversationId, history, subject: activeSubject } = 
-        await this.resolveConversation(userId, question, conversationId, subject);
+        await this.resolveConversation(userId, question, conversationId, subject, ragMode, documentId, explanationMode);
 
+      const recall = await this.recallStudyHistory(userId, question);
+      if (recall) { await this.saveMessages(activeConversationId, question, recall); async function* remembered() { yield recall!; } return { stream: remembered(), conversationId: activeConversationId }; }
       const evidence = ragMode ? await new RagService().retrieve(userId, question, documentId) : undefined;
       if (evidence && !evidence.sources.length) {
         await this.saveMessages(activeConversationId, question, NO_EVIDENCE);
@@ -530,8 +493,8 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
       }
       const promptWithContext = evidence ? `Retrieved evidence (JSON lines):\n${evidence.context}\n\nQuestion: ${question}` : question;
       const systemInstruction = ragMode
-        ? GROUNDING_INSTRUCTION + '\nReturn JSON with answer and sourceIds. sourceIds must use numeric IDs from the retrieved evidence. Answer directly and concisely; do not add unrelated teaching sections.'
-        : await this.buildSystemInstruction(userId, activeSubject);
+        ? teachingPolicy(teachingMode(explanationMode)) + '\n' + GROUNDING_INSTRUCTION + '\nReturn JSON with answer and sourceIds. sourceIds must use numeric IDs from the retrieved evidence. Use the selected teaching mode and answer only from the supplied evidence. Do not add unrelated sections.'
+        : await this.buildSystemInstruction(userId, activeSubject, teachingMode(explanationMode));
       // Buffer document-mode output until source IDs have been checked. General tutoring remains streamed.
       if (evidence) {
         const response = history.length ? await aiClient.startChat(history, systemInstruction, evidence ? GROUNDING_GENERATION_CONFIG : undefined).sendMessage(promptWithContext) : await aiClient.generateContent(promptWithContext, systemInstruction, evidence ? GROUNDING_GENERATION_CONFIG : undefined);
@@ -588,6 +551,15 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
       if (error instanceof AppError) throw error;
       throw new AppError('Unable to generate a response. Check provider availability and try again.', 502);
     }
+  }
+
+  private async recallStudyHistory(userId: string, question: string): Promise<string | undefined> {
+    if (!/(?:what.*(?:studied|covered|learned)|recall.*(?:old|topics?|subjects?|previous)|remember.*(?:studied|topics?|conversation)|have.*(?:studied|learned|covered))/i.test(question)) return;
+    const past = await prisma.conversation.findMany({ where: { userId, messages: { some: { role: 'user' } } },
+      orderBy: { updatedAt: 'desc' }, take: 100,
+      select: { title: true, subject: true, messages: { where: { role: 'user' }, orderBy: { createdAt: 'desc' }, take: 3, select: { content: true } } } });
+    if (!past.length) return 'I do not see earlier saved study conversations for this account yet. Chats in another account or sessions that were never saved are not available here.';
+    return 'Your saved conversations show these discussed topics (this records discussion, not mastery):\n\n' + past.map(c => `- **${c.subject || 'General'}** — ${c.title}: ${c.messages.map(m => m.content.slice(0,180).replace(/[\r\n]/g,' ')).join('; ')}`).join('\n') + '\n\nOpen History to resume any of these conversations. This is the most recent 100 saved conversations; older ones remain available in History.';
   }
 
   private handleGeminiError(error: any): never {

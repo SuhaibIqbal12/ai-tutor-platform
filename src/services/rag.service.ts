@@ -45,8 +45,14 @@ export class RagService {
     }
     const candidates = await prisma.documentChunk.findMany({ where: {
       document: { userId, status: 'READY', ...(documentId ? { id: documentId } : {}) },
-    }, include: { document: { select: { title: true, sourceUrl: true } } } });
+    }, orderBy: [{ documentId: 'asc' }, { chunkIndex: 'asc' }], include: { document: { select: { title: true, sourceUrl: true } } } });
     if (!candidates.length) return { sources: [], context: '', reason: 'No ready documents' };
+    if (documentId && /^(summarize|explain|give (?:me )?an? overview of) (?:the )?(?:selected |attached |uploaded )?(?:study )?material[.!?]?$/i.test(query.trim())) {
+      const count = Math.min(5,candidates.length);
+      const picked = Array.from({ length: count },(_,i) => candidates[count === 1 ? 0 : Math.round(i*(candidates.length-1)/(count-1))]);
+      const sources: RetrievedSource[] = picked.map((c,i) => ({ id:i+1,chunkId:c.id,documentId:c.documentId,title:c.document.title,content:c.content,pageNumber:c.pageNumber,timestamp:c.timestamp,sourceUrl:c.document.sourceUrl,similarity:1,lexicalScore:1 }));
+      return { sources, context: 'Overview uses sampled excerpts across the selected material. State this scope; do not claim exhaustive coverage.\n' + formatEvidence(sources) };
+    }
     const vector = await embed(query, 'RETRIEVAL_QUERY');
     const sources = rankEvidence(query, vector, candidates);
     diagnosticsService.log('retrieval', 'Evidence retrieval completed', { userId, candidates: candidates.length,
