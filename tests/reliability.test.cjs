@@ -230,3 +230,19 @@ test('video transcript fallback retains the real provided text and does not synt
     assert.match(result.segments[0].text,/parallel kernels/);
   } finally { dns.lookup = originalLookup; }
 });
+test('current caption reader preserves real timestamps and bounds requests', async () => {
+  const sdk = require('youtube-transcript-plus'); const originalFetch=sdk.fetchTranscript;
+  const dns = require('node:dns/promises'); const originalLookup=dns.lookup;
+  sdk.fetchTranscript=async (id,options) => { assert.equal(id,'BgJyHxXWbz4'); assert.ok(options.signal); assert.equal(options.retries,0); return [{text:'CUDA runs kernels on the GPU.',offset:25.5}]; };
+  dns.lookup=async () => [{address:'8.8.8.8',family:4}];
+  try { const result=await require('../dist/rag/extraction').extract({fileType:'YOUTUBE',url:'https://youtu.be/BgJyHxXWbz4'}); assert.equal(result.segments[0].timestamp,25.5); assert.match(result.segments[0].text,/CUDA/); }
+  finally { sdk.fetchTranscript=originalFetch; dns.lookup=originalLookup; }
+});
+test('large saved explanations do not overflow provider context and remain intact in storage', () => {
+  const { boundedTutorHistory }=require('../dist/services/tutor.service');
+  const messages=Array.from({length:30},(_,i)=>({role:i%2?'model':'user',content:'x'.repeat(20000)}));
+  const history=boundedTutorHistory(messages);
+  assert.ok(history.reduce((sum,m)=>sum+m.parts[0].text.length,0)<=12060);
+  assert.equal(history[0].role,'user'); assert.ok(history.some(m=>m.parts[0].text.includes('Excerpt')));
+  assert.equal(messages[0].content.length,20000);
+});

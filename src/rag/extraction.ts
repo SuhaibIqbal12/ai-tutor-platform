@@ -48,8 +48,8 @@ export async function extract(input: DocumentInput): Promise<Extraction> {
     if (input.content?.trim()) {
       result = { segments: [{ text: input.content }] };
     } else try {
-      const { YoutubeTranscript } = require('youtube-transcript');
-      const entries = await YoutubeTranscript.fetchTranscript(id);
+      const { fetchTranscript } = require('youtube-transcript-plus');
+      const entries = await fetchTranscript(id, { signal: AbortSignal.timeout(25000), retries: 0 });
       if (!entries?.length) throw new Error('No transcript');
       // youtube-transcript offsets are seconds. Preserve the original evidence timestamps.
       result = { segments: entries.map((e: any) => ({ text: e.text, timestamp: Number(e.offset) })) };

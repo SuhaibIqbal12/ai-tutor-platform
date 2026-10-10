@@ -247,6 +247,7 @@ export default function SourcesPage() {
       setActiveJobId(result.data.documentId);
       setJobProgress({ stage: result.data.stage });
       setSourceUrl("");
+      setVideoTranscript("");
     } catch (error: unknown) {
       setSourceError(
         error instanceof Error ? error.message : "URL upload failed.",
@@ -529,7 +530,7 @@ export default function SourcesPage() {
               type="url"
               required
               value={sourceUrl}
-              onChange={(e) => setSourceUrl(e.target.value)}
+              onChange={(e) => { setSourceUrl(e.target.value); setVideoTranscript(""); }}
               placeholder="https://..."
               className="w-full p-3 rounded-xl border border-border bg-background"
             />

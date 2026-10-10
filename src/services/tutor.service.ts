@@ -5,6 +5,21 @@ import { AppError } from '../middleware/error.middleware';
 import { RagService, NO_EVIDENCE } from './rag.service';
 import { GROUNDING_INSTRUCTION, GROUNDING_GENERATION_CONFIG, withVerifiedReferences } from '../rag/grounding';
 
+// Keep the full conversation in storage; bound only the context sent to providers.
+export function boundedTutorHistory(messages: Array<{role:string;content:string}>, budget = 12000) {
+  const excerpts: Array<{role:'user'|'model';parts:Array<{text:string}>}> = [];
+  for (const message of [...messages].reverse()) {
+    if (budget <= 0) break;
+    const content = message.content.slice(0,Math.min(4000,budget));
+    const clipped = content.length < message.content.length;
+    excerpts.push({ role: message.role === 'user' ? 'user' : 'model', parts: [{ text: content + (clipped ? '\n[Excerpt; the complete message is saved in History.]' : '') }] });
+    budget -= content.length + (clipped ? 60 : 0);
+  }
+  excerpts.reverse();
+  while (excerpts.length && excerpts[0].role !== 'user') excerpts.shift();
+  return excerpts;
+}
+
 export class TutorService {
   /**
    * Helper to resolve or create a conversation thread.
@@ -30,10 +45,7 @@ export class TutorService {
 
       activeSubject = subject || conversation.subject || 'General';
       await prisma.conversation.update({ where: { id: conversation.id }, data: { subject: activeSubject, ragMode, documentId: documentId || null, explanationMode: teachingMode(explanationMode) } });
-      history = conversation.messages.reverse().map(msg => ({
-        role: (msg.role === 'user' ? 'user' : 'model') as 'user' | 'model',
-        parts: [{ text: msg.content }],
-      })).slice(-30);
+      history = boundedTutorHistory(conversation.messages.reverse());
     } else {
       const title = question.length > 40 ? `${question.substring(0, 37)}...` : question;
       const newConversation = await prisma.conversation.create({
