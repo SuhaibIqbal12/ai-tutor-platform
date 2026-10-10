@@ -1,7 +1,7 @@
 import { prisma } from '../config/prisma';
 import { aiProviderService } from '../services/ai-provider.service';
 import { SchemaType } from '@google/generative-ai';
-import { embed, EMBEDDING_MODEL, EMBEDDING_DIMENSIONS } from './embedding';
+import { embedBatch, EMBEDDING_MODEL, EMBEDDING_DIMENSIONS } from './embedding';
 import { extract, DocumentInput } from './extraction';
 import { splitSegments } from './text';
 import { diagnosticsService } from '../services/diagnostics.service';
@@ -33,11 +33,15 @@ export async function processDocument(documentId: string, userId: string, input:
     await update('EMBEDDING', { chunksCreated: true, chunksCount: chunks.length });
     start = Date.now();
     const indexed = [];
-    for (const chunk of chunks) {
-      const vector = await embed(chunk.text);
-      indexed.push({ documentId, content: chunk.text, embedding: JSON.stringify(vector),
-        chunkIndex: chunk.chunkIndex, pageNumber: chunk.pageNumber, timestamp: chunk.timestamp,
-        model: EMBEDDING_MODEL, dimensions: EMBEDDING_DIMENSIONS });
+    for (let offset = 0; offset < chunks.length; offset += 32) {
+      const batch = chunks.slice(offset, offset + 32);
+      const vectors = await embedBatch(batch.map(chunk => chunk.text));
+      for (let i = 0; i < batch.length; i++) {
+        const chunk = batch[i];
+        indexed.push({ documentId, content: chunk.text, embedding: JSON.stringify(vectors[i]),
+          chunkIndex: chunk.chunkIndex, pageNumber: chunk.pageNumber, timestamp: chunk.timestamp,
+          model: EMBEDDING_MODEL, dimensions: EMBEDDING_DIMENSIONS });
+      }
       await update('EMBEDDING', { embeddingsCount: indexed.length });
     }
     timings.embeddingMs = Date.now() - start;

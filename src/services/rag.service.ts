@@ -1,5 +1,5 @@
 import { prisma } from '../config/prisma';
-import { embed, cosine, validVector, EMBEDDING_MODEL } from '../rag/embedding';
+import { embed, cosine, validVector, EMBEDDING_MODEL, EMBEDDING_DIMENSIONS } from '../rag/embedding';
 import { processDocument } from '../rag/processing';
 import { AppError } from '../middleware/error.middleware';
 import { diagnosticsService } from './diagnostics.service';
@@ -16,7 +16,7 @@ export function rankEvidence(query: string, vector: number[], candidates: Array<
   const scored = candidates.flatMap(c => {
     let parsed: unknown;
     try { parsed = JSON.parse(c.embedding); } catch { return []; }
-    if (c.model !== EMBEDDING_MODEL || c.dimensions !== 384 || !validVector(parsed)) return [];
+    if (c.model !== EMBEDDING_MODEL || c.dimensions !== EMBEDDING_DIMENSIONS || !validVector(parsed)) return [];
     const similarity = cosine(vector, parsed);
     const words = new Set(terms(c.content));
     const lexicalScore = queryTerms.length ? queryTerms.filter(x => words.has(x)).length / queryTerms.length : 0;
@@ -47,7 +47,7 @@ export class RagService {
       document: { userId, status: 'READY', ...(documentId ? { id: documentId } : {}) },
     }, include: { document: { select: { title: true, sourceUrl: true } } } });
     if (!candidates.length) return { sources: [], context: '', reason: 'No ready documents' };
-    const vector = await embed(query);
+    const vector = await embed(query, 'RETRIEVAL_QUERY');
     const sources = rankEvidence(query, vector, candidates);
     diagnosticsService.log('retrieval', 'Evidence retrieval completed', { userId, candidates: candidates.length,
       latencyMs: Date.now()-start, sourceIds: sources.map(s => s.chunkId), scores: sources.map(s => s.similarity) });

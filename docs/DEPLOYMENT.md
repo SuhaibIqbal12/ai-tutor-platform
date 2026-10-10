@@ -23,8 +23,12 @@ interrupted attempts become retryable after six minutes.
 
 The direct upload limit is 4 MiB, below Vercel's 4.5 MB request limit. Inline
 indexing accepts up to 500 chunks (roughly 45,000 words); split longer materials.
-The MiniLM cache uses writable `/tmp/tutor-embeddings` on Vercel. Cold instances
-need network access to download that model. Use Fluid Compute with a 300-second
+Vercel uses `gemini-embedding-001` with 768 dimensions and the configured
+`GEMINI_API_KEY`, with batches of 32 chunks. Local/worker deployments use MiniLM
+by default; `EMBEDDING_PROVIDER=gemini` selects hosted embeddings explicitly.
+Query and document vectors must use the same model; reupload older MiniLM
+sources after switching providers. Hosted embeddings have a separate provider
+quota from text generation. Use Fluid Compute with a 300-second
 request duration. Queue mode remains available for larger workloads.
 Scanned PDFs require OCR or a text version; video imports require accessible
 captions unless the documented worker fallback is enabled.
