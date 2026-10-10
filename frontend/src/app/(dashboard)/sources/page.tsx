@@ -82,7 +82,7 @@ export default function SourcesPage() {
       if (cancelled) return;
       if (Date.now() - startedAt > 10 * 60 * 1000) {
         setSourceError(
-          "Processing is taking longer than expected. Check the document status later; a worker may be unavailable.",
+          "Processing is taking longer than expected. Check the document status later or retry the upload if it has failed.",
         );
         setActiveJobId(null);
         return;
