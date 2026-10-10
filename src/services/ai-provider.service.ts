@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import axios from 'axios';
 import dotenv from 'dotenv';
+import { StringDecoder } from 'node:string_decoder';
 import { AppError } from '../middleware/error.middleware';
 import { diagnosticsService } from './diagnostics.service';
 
@@ -82,6 +83,7 @@ export class AIProviderService {
    * Startup environment check. Outputs a visual checklist on boot.
    */
   public validateKeys(): { [key: string]: boolean } {
+    const groq = !!process.env.GROQ_API_KEY;
     const gemini = !!process.env.GEMINI_API_KEY;
     const xai = !!process.env.XAI_API_KEY;
     const openrouter = !!process.env.OPENROUTER_API_KEY;
@@ -89,14 +91,15 @@ export class AIProviderService {
     const ollama = !!process.env.OLLAMA_BASE_URL;
 
     console.log('\n=== AI PROVIDER STARTUP REPORT ===');
-    console.log(`Google Gemini (Primary):    ${gemini ? '✓ Configured' : '✗ MISSING'}`);
+    console.log(`Groq (Text primary):       ${groq ? '✓ Configured' : '✗ MISSING'}`);
+    console.log(`Google Gemini (Vision/fallback):    ${gemini ? '✓ Configured' : '✗ MISSING'}`);
     console.log(`Grok / xAI (Fallback 1):   ${xai ? '✓ Configured' : '✗ MISSING'}`);
     console.log(`OpenRouter (Fallback 2):    ${openrouter ? '✓ Configured' : '✗ MISSING'}`);
     console.log(`OpenAI (Fallback 3):        ${openai ? '✓ Configured' : '✗ MISSING'}`);
     console.log(`Ollama (Local Fallback):    ${ollama ? '✓ Configured' : '✗ MISSING'}`);
     console.log('===================================\n');
 
-    return { gemini, xai, openrouter, openai, ollama };
+    return { groq, gemini, xai, openrouter, openai, ollama };
   }
 
   /**
@@ -207,6 +210,10 @@ export class AIProviderService {
   private buildProviders(isMultimodal: boolean, isStream: boolean, prompt: any, options: AIProviderOptions) {
     const providers: Array<{ name: string; execute: () => Promise<any> }> = [];
 
+    if (!isMultimodal && process.env.GROQ_API_KEY) {
+      providers.push({ name: 'GROQ', execute: () => this.retryOperation(() => this.generateWithGroq(typeof prompt === 'string' ? prompt : JSON.stringify(prompt), options, isStream), 'GROQ') });
+    }
+
     if (process.env.GEMINI_API_KEY) {
       if (isStream) {
         providers.push({ name: 'GEMINI', execute: () => this.retryOperation(() => this.generateStreamWithGemini(prompt, options), 'GEMINI') });
@@ -253,6 +260,10 @@ export class AIProviderService {
 
   private buildChatProviders(isStream: boolean, messages: any[], options: AIProviderOptions) {
     const providers: Array<{ name: string; execute: () => Promise<any> }> = [];
+
+    if (process.env.GROQ_API_KEY) {
+      providers.push({ name: 'GROQ', execute: () => this.retryOperation(() => this.generateWithGroq(messages, options, isStream), 'GROQ') });
+    }
 
     if (process.env.GEMINI_API_KEY) {
       if (isStream) {
@@ -520,6 +531,28 @@ export class AIProviderService {
   // ==========================================
   // xAI / GROK METHODS
   // ==========================================
+
+  private async generateWithGroq(prompt: string | any[], options: AIProviderOptions, stream: boolean): Promise<any> {
+    const model = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
+    const messages = this.buildOpenAIMessages(prompt, options);
+    const body: any = { model, messages, stream, temperature: options.temperature ?? 0.7, max_completion_tokens: 4096 };
+    if (model.startsWith('openai/gpt-oss')) body.reasoning_effort = 'low';
+    if (options.responseMimeType === 'application/json') {
+      body.response_format = { type: 'json_object' };
+      messages.unshift({ role: 'system', content: 'Return only valid JSON, following the requested schema exactly.' });
+    }
+    const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', body, {
+      headers: { Authorization: `Bearer ${process.env.GROQ_API_KEY}`, 'Content-Type': 'application/json' },
+      timeout: 45000,
+      ...(stream ? { responseType: 'stream' as const } : {})
+    });
+    if (stream) return this.parseSseStream(response.data);
+    const choice = response.data?.choices?.[0];
+    if (choice?.finish_reason === 'length' || typeof choice?.message?.content !== 'string' || !choice.message.content.trim()) {
+      throw new AppError('The AI provider returned an incomplete answer. Please retry.', 502);
+    }
+    return choice.message.content;
+  }
 
   private async generateWithXAI(prompt: string, options: AIProviderOptions): Promise<string> {
     const key = process.env.XAI_API_KEY;
@@ -813,24 +846,33 @@ export class AIProviderService {
 
   private async *parseSseStream(stream: any): AsyncGenerator<string, void, unknown> {
     let buffer = '';
+    const decoder = new StringDecoder('utf8');
+    const parse = (line: string): { done?: boolean; text?: string } => {
+      if (!line.trim().startsWith('data:')) return {};
+      const payload = line.trim().slice(5).trim();
+      if (payload === '[DONE]') return { done: true };
+      let data: any;
+      try { data = JSON.parse(payload); } catch { throw new AppError('The AI stream was interrupted. Please retry.', 502); }
+      if (data.error || data.choices?.[0]?.finish_reason === 'length') throw new AppError('The AI stream was interrupted. Please retry.', 502);
+      return { text: data.choices?.[0]?.delta?.content || '' };
+    };
     for await (const chunk of stream) {
-      buffer += chunk.toString();
+      buffer += typeof chunk === 'string' ? chunk : decoder.write(chunk);
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
       for (const line of lines) {
-        const cleanLine = line.trim();
-        if (!cleanLine.startsWith('data: ')) continue;
-        const dataStr = cleanLine.slice(6);
-        if (dataStr === '[DONE]') continue;
-        try {
-          const data = JSON.parse(dataStr);
-          const text = data.choices?.[0]?.delta?.content || '';
-          if (text) yield text;
-        } catch {
-          // ignore partial chunks
-        }
+        const event = parse(line);
+        if (event.done) return;
+        if (event.text) yield event.text;
       }
     }
+    buffer += decoder.end();
+    if (buffer.trim()) {
+      const event = parse(buffer);
+      if (event.done) return;
+      if (event.text) yield event.text;
+    }
+    throw new AppError('The AI stream was interrupted. Please retry.', 502);
   }
 
   private async *parseOllamaStream(stream: any): AsyncGenerator<string, void, unknown> {

@@ -42,7 +42,7 @@ Run these on a persistent Node host/container (Node 22 LTS recommended), with Po
 3. Set `DATABASE_URL` to the PostgreSQL connection string from your database provider. Add TLS parameters if the provider requires them. This implementation stores validated vectors as JSON text in `DocumentChunk.embedding`; it does **not** require pgvector or Chroma.
 4. Set `REDIS_URL` to the Redis provider's connection string, including authentication. Use `rediss://` when TLS is required.
 5. Generate a unique `JWT_SECRET` with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` and set the result privately. Minimum length: 32 characters.
-6. Set at least one provider key: `GEMINI_API_KEY` (Google AI Studio), `XAI_API_KEY` (xAI console), `OPENROUTER_API_KEY` (OpenRouter keys), or `OPENAI_API_KEY` (OpenAI Platform API keys). Alternatively set `OLLAMA_BASE_URL` to an accessible Ollama server with the configured model installed. The existing fallback order is Gemini → xAI → OpenRouter → OpenAI → Ollama. A configured key is not proof of successful API access.
+6. Set at least one provider key: `GROQ_API_KEY` (Groq console), `GEMINI_API_KEY` (Google AI Studio), `XAI_API_KEY` (xAI console), `OPENROUTER_API_KEY` (OpenRouter keys), or `OPENAI_API_KEY` (OpenAI Platform API keys). Alternatively set `OLLAMA_BASE_URL` to an accessible Ollama server with the configured model installed. The text fallback order is Groq → Gemini → xAI → OpenRouter → OpenAI → Ollama. A configured key is not proof of successful API access.
 7. Set `FRONTEND_ORIGIN` to the deployed frontend HTTPS origin. Set `TRUST_PROXY=true` only when exactly one trusted reverse proxy fronts the backend.
 8. Back up the database, then run `npx prisma migrate deploy`. Do not use `migrate reset` on production. An existing database created with `db push` may require migration baselining before deploy; review its migration history first.
 9. `npm run build`
@@ -94,3 +94,5 @@ docker compose up --build -d
 ```
 
 Open http://localhost:3000. The API is http://localhost:3001; `/ready` reports whether the database, Redis, worker, authentication and provider configuration are ready. Compose runs migrations before the API and worker, retains database/Redis/model-cache volumes, and binds ports to your computer's loopback interface. Keep this local stack private; it is not a production hosting service. Stop with `docker compose down` without `--volumes` to retain data. Docker images still require a real provider smoke test and must be verified on a Docker-enabled host before release.
+
+Groq uses `openai/gpt-oss-120b` by default; set `GROQ_MODEL` to override. Keep `GEMINI_API_KEY` for hosted document embeddings and image understanding. Redeploy after changing environment variables.

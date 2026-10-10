@@ -97,10 +97,15 @@ export default function DiagnosticsPage() {
                 {health.currentProvider}
               </span>
               <span className="text-xs text-muted-foreground mt-1">
-                Active provider for stream content requests
+                Preferred configured provider
               </span>
             </div>
             <div className="flex gap-2.5 pt-2 text-xs">
+              <span
+                className={`px-2 py-0.5 rounded font-bold border ${health.providers.groq ? "bg-green-500/10 border-green-500/20 text-green-500" : "bg-secondary border-border text-muted-foreground"}`}
+              >
+                Groq
+              </span>
               <span
                 className={`px-2 py-0.5 rounded font-bold border ${health.providers.gemini ? "bg-green-500/10 border-green-500/20 text-green-500" : "bg-secondary border-border text-muted-foreground"}`}
               >

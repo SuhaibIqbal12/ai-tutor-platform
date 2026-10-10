@@ -42,7 +42,7 @@ class DiagnosticsService {
     if (redis) {
       try { const { ragQueue } = await import('../queues/rag.queue'); workers = await ragQueue?.getWorkersCount() || 0; } catch { /* Worker unavailable. */ }
     }
-    const configuredProviders = ['GEMINI_API_KEY','XAI_API_KEY','OPENROUTER_API_KEY','OPENAI_API_KEY','OLLAMA_BASE_URL']
+    const configuredProviders = ['GROQ_API_KEY','GEMINI_API_KEY','XAI_API_KEY','OPENROUTER_API_KEY','OPENAI_API_KEY','OLLAMA_BASE_URL']
       .filter(key => process.env[key] && !process.env[key]!.startsWith('your_'));
     const authConfigured = !!process.env.JWT_SECRET && process.env.JWT_SECRET.length >= 32 && !process.env.JWT_SECRET.startsWith('your_');
     const inline = inlineProcessing();
@@ -54,6 +54,7 @@ class DiagnosticsService {
   }
 
   public async getHealthStats(userId: string) {
+    const groq = !!process.env.GROQ_API_KEY;
     const gemini = !!process.env.GEMINI_API_KEY;
     const xai = !!process.env.XAI_API_KEY;
     const openai = !!process.env.OPENAI_API_KEY;
@@ -91,8 +92,8 @@ class DiagnosticsService {
       redisConnected = ping === 'PONG';
     } catch {}
 
-    const providers = { gemini, xai, openrouter, openai, ollama };
-    const currentProvider = gemini ? 'Google Gemini (configured)' : xai ? 'xAI (configured)' : openrouter ? 'OpenRouter (configured)' : openai ? 'OpenAI (configured)' : ollama ? 'Ollama (configured)' : 'None';
+    const providers = { groq, gemini, xai, openrouter, openai, ollama };
+    const currentProvider = groq ? 'Groq (configured)' : gemini ? 'Google Gemini (configured)' : xai ? 'xAI (configured)' : openrouter ? 'OpenRouter (configured)' : openai ? 'OpenAI (configured)' : ollama ? 'Ollama (configured)' : 'None';
 
     return {
       providers,
