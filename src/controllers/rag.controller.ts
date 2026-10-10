@@ -6,13 +6,17 @@ import { requireRagQueue } from '../queues/rag.queue';
 import { RagService } from '../services/rag.service';
 import { AppError } from '../middleware/error.middleware';
 import { validatePublicUrl, youtubeId } from '../rag/url';
+import { inlineProcessing } from '../config/processing';
+import { processDocument } from '../rag/processing';
 const ragService = new RagService();
 const hash = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
 async function enqueue(req: AuthenticatedRequest, res: Response, input: Record<string, any>, inputHash: string) {
   const userId = req.user!.id;
-  const queue = await requireRagQueue();
+  const inline = inlineProcessing();
+  const queue = inline ? null : await requireRagQueue();
   let document = await prisma.document.findUnique({ where: { userId_inputHash: { userId, inputHash } } });
-  if (document && !['FAILED','NEEDS_REINDEX'].includes(document.status)) {
+  const stale = document && inline && document.status !== 'READY' && Date.now() - document.updatedAt.getTime() > 6 * 60 * 1000;
+  if (document && !stale && !['FAILED','NEEDS_REINDEX'].includes(document.status)) {
     res.status(document.status === 'READY' ? 200 : 202).json({ status: 'success', message: 'This source already exists.', data: { documentId: document.id, title: document.title, stage: document.status } });
     return;
   }
@@ -28,8 +32,21 @@ async function enqueue(req: AuthenticatedRequest, res: Response, input: Record<s
       throw error;
     }
   }
+  if (inline) {
+    // Compare-and-set prevents concurrent retries from indexing the same source twice.
+    const claimed = await prisma.document.updateMany({ where: { id: document.id, updatedAt: document.updatedAt },
+      data: { status: 'PROCESSING', error: null, progress: null } });
+    if (!claimed.count) {
+      res.status(202).json({ status: 'success', data: { documentId: document.id, title: document.title, stage: 'PROCESSING' } });
+      return;
+    }
+    await processDocument(document.id, userId, input as any);
+    res.status(200).json({ status: 'success', message: 'Material indexed and ready for questions.',
+      data: { documentId: document.id, title: document.title, stage: 'READY' } });
+    return;
+  }
   // Job IDs are stable per document. Remove a completed/failed job before retrying it.
-  const existingJob = await queue.getJob(document.id);
+  const existingJob = await queue!.getJob(document.id);
   if (existingJob) {
     const state = await existingJob.getState();
     if (state === 'failed' || state === 'completed') await existingJob.remove();
@@ -37,7 +54,7 @@ async function enqueue(req: AuthenticatedRequest, res: Response, input: Record<s
   }
   await prisma.document.update({ where: { id: document.id }, data: { status: 'UPLOADED', error: null, progress: null } });
   try {
-    await queue.add('process-document', { ...input, userId, documentId: document.id }, { jobId: document.id,
+    await queue!.add('process-document', { ...input, userId, documentId: document.id }, { jobId: document.id,
       attempts: 2, backoff: { type: 'exponential', delay: 2000 }, removeOnComplete: 100, removeOnFail: 100 });
   } catch {
     await prisma.document.update({ where: { id: document.id }, data: { status: 'FAILED', error: 'Unable to queue processing. Retry when Redis is available.' } });

@@ -31,7 +31,7 @@ app.use('/api', apiLimiter);
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Serve the sanitizer used by the legacy client from the installed, locked dependency.
-app.get('/vendor/purify.min.js', (_req, res) => res.sendFile(path.join(path.dirname(require.resolve('dompurify')), 'purify.min.js')));
+app.get('/vendor/purify.min.js', (_req, res) => res.sendFile(require.resolve('dompurify/purify.min.js')));
 
 // Server health check route
 app.get('/health', (req: Request, res: Response) => {

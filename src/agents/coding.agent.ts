@@ -63,7 +63,8 @@ Include starter boilerplate code, sample test cases, and a list of hints that he
       return parseModuleOutput(text, moduleOutputs.exercise);
     } catch (err: any) {
       console.error('Coding Agent Exercise Generation Error:');
-      throw new AppError(`Failed to generate coding exercise: ${err.message || err}`, 502);
+      if (err instanceof AppError) throw err;
+      throw new AppError('Failed to generate coding exercise. Please retry.', 502);
     }
   }
 
@@ -133,7 +134,8 @@ Tailor the feedback and hints to the student's level and style (e.g. more struct
       return parseModuleOutput(text, moduleOutputs.review);
     } catch (err: any) {
       console.error('Coding Agent Code Review Error:');
-      throw new AppError(`Failed to review code: ${err.message || err}`, 502);
+      if (err instanceof AppError) throw err;
+      throw new AppError('Failed to review code. Please retry.', 502);
     }
   }
 }

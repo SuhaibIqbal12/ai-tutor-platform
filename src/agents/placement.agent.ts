@@ -51,7 +51,8 @@ ${resumeText}
       return parseModuleOutput(result.response.text(), moduleOutputs.resume);
     } catch (err: any) {
       console.error('Placement Agent Resume Analysis Error:');
-      throw new AppError(`Failed to parse resume: ${err.message || err}`, 502);
+      if (err instanceof AppError) throw err;
+      throw new AppError('Failed to parse resume. Please retry.', 502);
     }
   }
 
@@ -111,7 +112,8 @@ Generate the next question/follow-up. Provide constructive feedback on their las
       return parsed;
     } catch (err: any) {
       console.error('Placement Agent Interview Error:');
-      throw new AppError(`Failed to run mock interview: ${err.message || err}`, 502);
+      if (err instanceof AppError) throw err;
+      throw new AppError('Failed to run mock interview. Please retry.', 502);
     }
   }
 
@@ -233,7 +235,8 @@ Be encouraging, specific, and constructive.`;
       return parseModuleOutput(result.response.text(), moduleOutputs.practice);
     } catch (err: any) {
       console.error('Placement Agent Practice Generation Error:');
-      throw new AppError(`Failed to generate practice challenge: ${err.message || err}`, 502);
+      if (err instanceof AppError) throw err;
+      throw new AppError('Failed to generate practice challenge. Please retry.', 502);
     }
   }
 }

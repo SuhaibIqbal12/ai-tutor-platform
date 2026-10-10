@@ -1,5 +1,7 @@
 import { prisma } from '../config/prisma';
 import { redisClient, redisConfigured } from '../config/redis';
+import { inlineProcessing } from '../config/processing';
+import { requestContext } from './request-context';
 
 export interface LogEntry {
   timestamp: string;
@@ -18,7 +20,7 @@ class DiagnosticsService {
       timestamp: new Date().toISOString(),
       type,
       message,
-      details
+      details: { ...details, userId: details?.userId || requestContext.getStore()?.userId }
     });
     if (this.logs.length > this.maxLogs) {
       this.logs.pop();
@@ -43,10 +45,12 @@ class DiagnosticsService {
     const configuredProviders = ['GEMINI_API_KEY','XAI_API_KEY','OPENROUTER_API_KEY','OPENAI_API_KEY','OLLAMA_BASE_URL']
       .filter(key => process.env[key] && !process.env[key]!.startsWith('your_'));
     const authConfigured = !!process.env.JWT_SECRET && process.env.JWT_SECRET.length >= 32 && !process.env.JWT_SECRET.startsWith('your_');
-    return { ready: database && redis && workers > 0 && authConfigured && configuredProviders.length > 0,
+    const inline = inlineProcessing();
+    return { ready: database && (inline || (redis && workers > 0)) && authConfigured && configuredProviders.length > 0,
       database: database ? 'Connected' : 'Disconnected', redis: redis ? 'Connected' : 'Disconnected',
       authConfigured, configuredProviders, providerConnectivity: 'Not probed',
-      workers, worker: workers > 0 ? 'Connected' : 'Unavailable: run npm run worker on a persistent host.' };
+      processingMode: inline ? 'inline' : 'queue',
+      workers, worker: inline ? 'Not required: bounded processing runs during upload.' : workers > 0 ? 'Connected' : 'Unavailable: run npm run worker on a persistent host.' };
   }
 
   public async getHealthStats(userId: string) {

@@ -2,8 +2,9 @@ import { Router } from 'express';
 import { uploadDocument, uploadDocumentFile, uploadDocumentUrl, getDocuments, getKnowledgeGraph, getDocumentProgress, getDocumentDetails } from '../controllers/rag.controller';
 import { authMiddleware } from '../middleware/auth.middleware';
 import multer from 'multer';
+import { MAX_UPLOAD_BYTES } from '../config/processing';
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 } });
 const router = Router();
 
 // POST /api/rag/upload (text input)

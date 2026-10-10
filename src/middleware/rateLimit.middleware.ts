@@ -1,4 +1,6 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { Request } from 'express';
+import { isIP } from 'node:net';
 import { isRedisConnected } from '../config/redis';
 
 // Dynamically create a Redis store only when Redis is available
@@ -19,9 +21,15 @@ function getStore(prefix: string) {
 }
 
 const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+export function clientRateLimitKey(req: Request): string {
+  // Only Vercel's own runtime may trust the header sanitized by its edge proxy.
+  const edgeIp = process.env.VERCEL === '1' ? req.get('x-vercel-forwarded-for')?.split(',')[0].trim() : undefined;
+  return ipKeyGenerator(edgeIp && isIP(edgeIp) ? edgeIp : req.ip || req.socket.remoteAddress || 'unknown');
+}
 
 // Standard rate limiter for API endpoints (e.g., 100 requests per 15 minutes)
 export const apiLimiter = rateLimit({
+  keyGenerator: clientRateLimitKey,
   windowMs: 15 * 60 * 1000,
   max: isDev ? 10000 : 100,
   standardHeaders: true,
@@ -35,6 +43,7 @@ export const apiLimiter = rateLimit({
 
 // Stricter rate limiter for AI generation endpoints (e.g., 20 requests per 15 minutes)
 export const aiGenerationLimiter = rateLimit({
+  keyGenerator: clientRateLimitKey,
   windowMs: 15 * 60 * 1000,
   max: isDev ? 1000 : 20,
   standardHeaders: true,
@@ -48,6 +57,7 @@ export const aiGenerationLimiter = rateLimit({
 
 // Strict rate limiter for auth/login endpoint (max 10 requests per minute)
 export const loginLimiter = rateLimit({
+  keyGenerator: clientRateLimitKey,
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 10,
   standardHeaders: true,

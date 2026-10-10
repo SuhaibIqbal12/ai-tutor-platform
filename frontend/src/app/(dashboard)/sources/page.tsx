@@ -163,12 +163,13 @@ export default function SourcesPage() {
   const handleIngestFile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!file || loading) return;
-    if (file.size > 10 * 1024 * 1024) {
-      setSourceError("Maximum file size is 10 MB.");
+    if (file.size > 4 * 1024 * 1024) {
+      setSourceError("Maximum file size is 4 MB. Split or compress larger files.");
       return;
     }
 
     setLoading(true);
+    setSourceError("");
     const token = localStorage.getItem("token") || "";
     const formData = new FormData();
     formData.append("file", file);
@@ -496,7 +497,7 @@ export default function SourcesPage() {
                   Select a document
                 </span>
                 <span className="text-xs text-muted-foreground mt-1">
-                  PDF, DOCX, PPTX, JPG, TXT up to 10MB
+                  PDF, DOCX, PPTX, JPG, TXT up to 4MB
                 </span>
                 <input
                   type="file"

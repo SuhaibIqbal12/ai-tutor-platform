@@ -10,10 +10,28 @@ Set the backend deployment Build Command to `npm run build:deploy` to apply
 checked-in migrations before compiling. This command uses
 `TUTOR_DATABASE_URL_UNPOOLED` when available and stops if migration fails.
 Use it only for the intended deployment database; review and back up existing
-data and migration history before enabling it. The worker still needs a
-persistent host even when the API is deployed on Vercel.
+data and migration history before enabling it.
 
-Run these on a persistent Node host/container (Node 22 LTS recommended), with PostgreSQL and Redis reachable from both processes. BullMQ workers and embedding downloads cannot rely on short-lived serverless functions.
+### Vercel upload mode
+
+On Vercel (`VERCEL=1`), indexing runs within the upload request by default. It
+does not need Redis or a persistent worker. `RAG_PROCESSING_MODE=inline` enables
+the same mode elsewhere; `RAG_PROCESSING_MODE=queue` selects BullMQ explicitly.
+Uploads return READY only after extraction, embeddings and database indexing
+complete. Keep the tab open during processing. Failed sources can be retried;
+interrupted attempts become retryable after six minutes.
+
+The direct upload limit is 4 MiB, below Vercel's 4.5 MB request limit. Inline
+indexing accepts up to 500 chunks (roughly 45,000 words); split longer materials.
+The MiniLM cache uses writable `/tmp/tutor-embeddings` on Vercel. Cold instances
+need network access to download that model. Use Fluid Compute with a 300-second
+request duration. Queue mode remains available for larger workloads.
+Scanned PDFs require OCR or a text version; video imports require accessible
+captions unless the documented worker fallback is enabled.
+
+### Persistent worker mode
+
+Run these on a persistent Node host/container (Node 22 LTS recommended), with PostgreSQL and Redis reachable from both processes. BullMQ workers require a persistent process.
 
 1. `npm ci`
 2. Copy `.env.example` to `.env` locally, or set the variables in the host's environment settings.

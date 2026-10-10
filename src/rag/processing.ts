@@ -5,6 +5,8 @@ import { embed, EMBEDDING_MODEL, EMBEDDING_DIMENSIONS } from './embedding';
 import { extract, DocumentInput } from './extraction';
 import { splitSegments } from './text';
 import { diagnosticsService } from '../services/diagnostics.service';
+import { AppError } from '../middleware/error.middleware';
+import { inlineProcessing, INLINE_MAX_CHUNKS } from '../config/processing';
 export async function processDocument(documentId: string, userId: string, input: DocumentInput) {
   const doc = await prisma.document.findFirst({ where: { id: documentId, userId } });
   if (!doc) throw new Error('Document not found');
@@ -25,6 +27,7 @@ export async function processDocument(documentId: string, userId: string, input:
     await update('CHUNKING', { textExtracted: true, pageCount: extraction.pageCount, emptyPages: extraction.emptyPages });
     start = Date.now();
     const chunks = splitSegments(extraction.segments);
+    if (inlineProcessing() && chunks.length > INLINE_MAX_CHUNKS) throw new AppError('This material is too long to process in one upload. Split it into shorter documents (about 45,000 words each).', 422);
     if (!chunks.length) throw new Error('No chunks produced');
     timings.chunkingMs = Date.now() - start;
     await update('EMBEDDING', { chunksCreated: true, chunksCount: chunks.length });
@@ -81,10 +84,10 @@ export async function processDocument(documentId: string, userId: string, input:
     diagnosticsService.log('ingestion', 'Document indexed successfully', { documentId, userId, chunksCount: chunks.length, timings });
   } catch (error: any) {
     const failedStage = progress.stage;
-    const message = error.statusCode === 422 ? error.message : 'Document processing failed. Check the worker, database and embedding model, then retry.';
+    const message = error instanceof AppError ? error.message : 'Document processing failed. Retry the upload; if it continues, check indexing diagnostics.';
     await prisma.document.update({ where: { id: documentId }, data: { error: message } });
     await update('FAILED', { tutorReady: false, error: message, failedStage, timings });
     diagnosticsService.log('ingestion', 'Document processing failed', { documentId, userId, stage: progress.stage });
-    throw new Error(message);
+    throw error instanceof AppError ? error : new AppError(message, 503);
   }
 }

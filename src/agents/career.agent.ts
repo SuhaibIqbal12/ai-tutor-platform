@@ -101,7 +101,8 @@ If their Coding Growth Score is high, suggest advanced technical projects or com
       return parseModuleOutput(text, moduleOutputs.career);
     } catch (err: any) {
       console.error('Career Agent Plan Generation Error:');
-      throw new AppError(`Failed to generate career path: ${err.message || err}`, 502);
+      if (err instanceof AppError) throw err;
+      throw new AppError('Failed to generate career path. Please retry.', 502);
     }
   }
 }

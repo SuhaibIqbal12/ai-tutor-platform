@@ -9,7 +9,7 @@ export async function embed(text: string): Promise<number[]> {
   if (!text.trim()) throw new AppError('Cannot embed empty text.', 422);
   if (!extractorPromise) {
     const { pipeline, env } = require('@xenova/transformers');
-    if (process.env.EMBEDDING_CACHE_DIR) env.cacheDir = process.env.EMBEDDING_CACHE_DIR;
+    env.cacheDir = process.env.EMBEDDING_CACHE_DIR || (process.env.VERCEL === '1' ? '/tmp/tutor-embeddings' : env.cacheDir);
     extractorPromise = pipeline('feature-extraction', EMBEDDING_MODEL).catch(() => {
       extractorPromise = undefined;
       throw new AppError('Embedding model unavailable. Download/cache the MiniLM model on the worker and API host.', 503);

@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { AppError } from './error.middleware';
 import { prisma } from '../config/prisma';
 import { getJwtSecret } from '../services/auth.service';
+import { requestContext } from '../services/request-context';
 
 export interface AuthenticatedRequest extends Request {
   user?: { id: string; email?: string };
@@ -35,6 +36,6 @@ export const authMiddleware = async (req: AuthenticatedRequest, res: Response, n
     const user = await prisma.user.findUnique({ where: { id: identity.id }, select: { id: true } });
     if (!user) throw new AppError('Account not found. Please sign in again.', 401);
     req.user = identity;
-    next();
+    requestContext.run({ userId: identity.id }, next);
   } catch (error) { next(error); }
 };

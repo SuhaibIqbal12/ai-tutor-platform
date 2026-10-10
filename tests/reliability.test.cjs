@@ -179,3 +179,30 @@ test('quiz generation schema rejects duplicates and invalid keys and hides adapt
   const visible = publicQuestions([q])[0];
   assert.equal(visible.correctAnswerIndex, undefined); assert.equal(visible.explanation, undefined);
 });
+test('inline PDF upload indexes without a queue worker, reuses duplicates and recovers stale attempts', async () => {
+  process.env.RAG_PROCESSING_MODE = 'inline';
+  try {
+    const content = 'The Aurora laboratory opens at 09:15 in Jaipur and studies solar panels.';
+    const options = { ...body({ title: 'Inline notes', content }), headers: { ...body({}).headers, Authorization: `Bearer ${token}` } };
+    const uploaded = await request('/api/rag/upload', options);
+    assert.equal(uploaded.status, 200); assert.equal(uploaded.data.data.stage, 'READY');
+    const id = uploaded.data.data.documentId;
+    assert.ok((await new RagService().retrieve(userId, 'When does Aurora laboratory open?', id)).sources.length);
+    assert.equal((await request('/api/rag/upload', options)).data.data.documentId, id);
+    await prisma.document.update({ where: { id }, data: { status: 'EMBEDDING', updatedAt: new Date(Date.now() - 7 * 60000) } });
+    assert.equal((await request('/api/rag/upload', options)).data.data.stage, 'READY');
+    const data = new FormData(); data.append('file', new Blob([fs.readFileSync(`${__dirname}/fixtures/learning.pdf`)], { type: 'application/pdf' }), 'inline.pdf');
+    const pdf = await request('/api/rag/upload-file', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: data });
+    assert.equal(pdf.status, 200); assert.equal(pdf.data.data.stage, 'READY');
+    const oversized = await request('/api/rag/upload', { ...options, body: JSON.stringify({ title:'Long notes', content:'solar energy '.repeat(30000) }) });
+    assert.equal(oversized.status, 422); assert.match(oversized.data.message, /Split/);
+  } finally { delete process.env.RAG_PROCESSING_MODE; }
+});
+test('safe provider errors distinguish quota, credentials and outage without leaking SDK messages', () => {
+  const { providerFailure } = require('../dist/services/ai-provider.service');
+  assert.equal(providerFailure({ status:429 }).statusCode, 429);
+  assert.match(providerFailure({ status:429 }).message, /usage limit/);
+  assert.equal(providerFailure({ status:403 }).statusCode, 503);
+  assert.equal(providerFailure({ status:500 }).statusCode, 502);
+  assert.ok(!providerFailure({ status:500, message:'secret=do-not-print' }).message.includes('do-not-print'));
+});

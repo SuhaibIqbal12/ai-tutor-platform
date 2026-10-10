@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../middleware/auth.middleware';
 import { TutorService } from '../services/tutor.service';
+import { AppError } from '../middleware/error.middleware';
 
 const tutorService = new TutorService();
 
@@ -99,7 +100,7 @@ export const askQuestionStream = async (
   } catch (error: any) {
     console.error('SSE Controller Error:');
     if (res.headersSent) {
-      res.write(`data: ${JSON.stringify({ type: 'error', message: error.statusCode && error.statusCode < 500 ? error.message : 'Tutor response unavailable. Please try again.' })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'error', message: error instanceof AppError ? error.message : 'Tutor response unavailable. Please try again.' })}\n\n`);
       res.end();
     } else {
       res.status(500).json({

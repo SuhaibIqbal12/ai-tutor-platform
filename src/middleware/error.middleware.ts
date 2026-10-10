@@ -28,7 +28,8 @@ export const errorHandler = (
 ): void => {
   const multer = err as Error & { code?: string };
   const statusCode = multer.code === 'LIMIT_FILE_SIZE' ? 413 : err instanceof AppError ? err.statusCode : 500;
-  const message = multer.code === 'LIMIT_FILE_SIZE' ? 'File is too large. Maximum size is 10 MB.' :
+  const message = multer.code === 'LIMIT_FILE_SIZE' ? 'File is too large. Maximum size is 4 MB. Split or compress it and try again.' :
+    err instanceof AppError && err.isOperational ? err.message :
     statusCode >= 500 ? 'Service unavailable. Please retry; if this continues, check the application configuration and diagnostics.' : err.message;
   // Raw SDK/database errors can contain connection URLs, keys, or student text.
   console.error(`[API] Request failed with status ${statusCode}`);

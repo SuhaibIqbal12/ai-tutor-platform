@@ -59,8 +59,15 @@ function isRetryable(err: any): boolean {
   );
 }
 
+export function providerFailure(error: any): AppError {
+  if (isQuotaError(error)) return new AppError('The AI provider has reached its usage limit. Wait for the quota to reset or update the provider plan in your AI account.', 429);
+  if (isInvalidKeyError(error)) return new AppError('The AI provider rejected its configured key. Check the key and model permissions in deployment settings.', 503);
+  return new AppError('The AI provider could not complete this request. Please retry shortly.', 502);
+}
+
 function logFallback(fromProvider: string, reason: string, err: any) {
   console.warn(`[AI] ${fromProvider} failed (${err.status || err.response?.status || 'network/provider error'}); trying the next configured provider.`);
+  diagnosticsService.log('ai_request', `${fromProvider}: ${reason}`, { status: err.status || err.response?.status || null });
 }
 
 export class AIProviderService {
@@ -319,7 +326,7 @@ export class AIProviderService {
       }
     }
 
-    throw new AppError('AI providers are unavailable. Check model access and quota.', 502);
+    throw providerFailure(lastError);
   }
 
   private async generateStreamWithFallback(prompt: string | any[], options: AIProviderOptions): Promise<AsyncGenerator<string, void, unknown>> {
@@ -346,7 +353,7 @@ export class AIProviderService {
       }
     }
 
-    throw new AppError('AI providers are unavailable. Check model access and quota.', 502);
+    throw providerFailure(lastError);
   }
 
   private async generateChatCompletionWithFallback(messages: any[], options: AIProviderOptions): Promise<string> {
@@ -374,7 +381,7 @@ export class AIProviderService {
       }
     }
 
-    throw new AppError('AI providers are unavailable. Check model access and quota.', 502);
+    throw providerFailure(lastError);
   }
 
   private async generateChatStreamWithFallback(messages: any[], options: AIProviderOptions): Promise<AsyncGenerator<string, void, unknown>> {
@@ -405,12 +412,7 @@ export class AIProviderService {
       }
     }
 
-    // Return an error stream — prevents UI from hanging forever
-    const errMsg = 'Provider unavailable. Check configured model access and quota.';
-    async function* errorStream() {
-      yield `⚠️ All AI providers failed. Please check your API keys.\n\nLast error: ${errMsg.substring(0, 300)}`;
-    }
-    return errorStream();
+    throw providerFailure(lastError);
   }
 
   // ==========================================
@@ -426,7 +428,7 @@ export class AIProviderService {
         responseSchema: options.responseSchema,
         temperature: options.temperature
       }
-    });
+    }, { timeout: 45000 });
     const result = await model.generateContent(prompt);
     return result.response.text();
   }
@@ -440,7 +442,7 @@ export class AIProviderService {
         responseSchema: options.responseSchema,
         temperature: options.temperature
       }
-    });
+    }, { timeout: 45000 });
     const result = await model.generateContentStream(prompt);
     async function* geminiChunks() {
       for await (const chunk of result.stream) {
@@ -460,7 +462,7 @@ export class AIProviderService {
       model: this.defaultModel,
       systemInstruction: options.systemInstruction,
       generationConfig: { temperature: options.temperature }
-    });
+    }, { timeout: 45000 });
     const chat = model.startChat({ history: geminiHistory });
     const result = await chat.sendMessage(userMessage);
     return result.response.text();
@@ -476,7 +478,7 @@ export class AIProviderService {
       model: this.defaultModel,
       systemInstruction: options.systemInstruction,
       generationConfig: { temperature: options.temperature }
-    });
+    }, { timeout: 45000 });
     const chat = model.startChat({ history: geminiHistory });
     const result = await chat.sendMessageStream(userMessage);
     async function* geminiChatChunks() {
