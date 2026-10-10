@@ -81,10 +81,8 @@ Each question must have exactly 4 choices.`;
       };
     } catch (error: any) {
       console.error('Quiz Generation Error:');
-      if (error.message && error.message.includes('API key not valid')) {
-        throw new AppError('Gemini API Key is invalid, expired, or missing. Please verify the GEMINI_API_KEY in your .env file.', 401);
-      }
-      throw new AppError(`Failed to generate quiz: ${error.message || error}`, 502);
+      if (error instanceof AppError) throw error;
+      throw new AppError('Failed to generate a valid quiz. Please retry.', 502);
     }
   }
 

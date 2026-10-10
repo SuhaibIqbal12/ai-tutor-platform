@@ -54,6 +54,8 @@ Run these on a persistent Node host/container (Node 22 LTS recommended), with Po
 
 ## Existing data and accounts
 
+On Vercel, optional AI extraction of conversation memories is disabled by default to avoid unawaited background work and an extra provider request for every answer. Quiz mastery and onboarding profiles remain persisted. Set `TUTOR_MEMORY_EXTRACTION_ENABLED=true` to opt in; extraction then completes within the request. Evidence-refusal answers never trigger memory inference.
+
 The additive migration preserves old document rows and marks them `NEEDS_REINDEX`. Run `npm run reindex` to rebuild only those rows using retained extracted text and the shared pipeline. This does not need a Gemini key for embeddings; optional enrichment may be unavailable. Old records did not retain reliable page metadata: re-upload originals when page-level citations matter. Empty/invalid retained text requires re-upload. Do not run the script while another worker is processing the same documents.
 
 Old mock accounts have no valid password hash. Do not give them a shared password or silently create a password at login. Verified Supabase OAuth can recover an existing account with the same confirmed email. Otherwise a verified account recovery flow still needs implementation; contact the operator before registering another identity and splitting data ownership.

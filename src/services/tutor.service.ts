@@ -67,10 +67,19 @@ export class TutorService {
       },
     });
     
-    // Background task: Extract and store Long Term Memory
-    this.extractAndStoreMemory(conversationId, question, response).catch(err => {
-      console.error('Failed to extract long term memory:');
-    });
+    // Refusals contain no student insight. Serverless functions cannot reliably
+    // finish unawaited work after returning; keep extra inference opt-in there.
+    if (response !== NO_EVIDENCE) {
+      if (process.env.VERCEL === '1') {
+        if (process.env.TUTOR_MEMORY_EXTRACTION_ENABLED === 'true') {
+          await this.extractAndStoreMemory(conversationId, question, response);
+        }
+      } else {
+        this.extractAndStoreMemory(conversationId, question, response).catch(() => {
+          console.error('Failed to extract long term memory:');
+        });
+      }
+    }
   }
 
   private async extractAndStoreMemory(conversationId: string, question: string, response: string) {

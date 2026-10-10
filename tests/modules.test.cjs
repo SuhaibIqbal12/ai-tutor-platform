@@ -112,3 +112,18 @@ test('provider failures across generating modules return failures without fake r
     assert.equal((await request('/api/placement/practice?type=aptitude')).status, 502);
   } finally { providerFailure = false; }
 });
+
+test('legacy quiz retains operational quota status and masks unexpected provider details', async () => {
+  const savedModel = provider.getModel;
+  const { AppError } = require('../dist/middleware/error.middleware');
+  try {
+    provider.getModel = () => ({ generateContent: async () => { throw new AppError('Provider usage limit reached.', 429); } });
+    const limited = await request('/api/quiz/generate', { topic: 'Python', questionCount: 2 });
+    assert.equal(limited.status, 429);
+    assert.match(limited.data.message, /usage limit/);
+    provider.getModel = () => ({ generateContent: async () => { throw Error('SDK detail with credential=secret-placeholder'); } });
+    const failed = await request('/api/quiz/generate', { topic: 'Python', questionCount: 2 });
+    assert.equal(failed.status, 502);
+    assert.ok(!JSON.stringify(failed.data).includes('secret-placeholder'));
+  } finally { provider.getModel = savedModel; }
+});

@@ -89,7 +89,15 @@ test('retrieval uses real query embeddings and isolates users and selected docum
 });
 test('document-mode absent evidence refuses without invoking an LLM; provider failures do not become saved answers', async () => {
   const tutor = new TutorService();
-  const answer = await tutor.getTutoringResponse(otherUser.id, 'What is the tuition fee?', undefined, true);
+  const original = provider.getModel;
+  let calls = 0;
+  provider.getModel = () => { calls++; throw Error('Unexpected inference for absent evidence'); };
+  let answer;
+  try {
+    answer = await tutor.getTutoringResponse(otherUser.id, 'What is the tuition fee?', undefined, true);
+    await new Promise(resolve => setTimeout(resolve, 25));
+    assert.equal(calls, 0);
+  } finally { provider.getModel = original; }
   assert.match(answer.response, /couldn't find evidence/);
   await assert.rejects(tutor.getTutoringResponse(userId, 'Explain loops', undefined, false), /configured|generate|unavailable/);
   assert.equal(await prisma.message.count({ where: { content: { contains: 'configuration error' } } }), 0);
