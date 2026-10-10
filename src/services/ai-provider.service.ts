@@ -753,7 +753,46 @@ export class AIProviderService {
     return this.parseSseStream(response.data);
   }
 
-  // =========…455 tokens truncated…stream: true
+  // ==========================================
+  // OLLAMA LOCAL METHODS (graceful if not running)
+  // ==========================================
+
+  private getOllamaBaseUrl(): string {
+    return process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+  }
+
+  private async generateWithOllama(prompt: string, options: AIProviderOptions): Promise<string> {
+    const baseUrl = this.getOllamaBaseUrl();
+    let fullPrompt = prompt;
+    if (options.systemInstruction) fullPrompt = `System: ${options.systemInstruction}\n\nUser: ${prompt}`;
+    if (options.responseMimeType === 'application/json' && options.responseSchema) {
+      fullPrompt += `\n\nIMPORTANT: Respond ONLY with valid JSON conforming to this schema:\n${JSON.stringify(options.responseSchema, null, 2)}`;
+    }
+    try {
+      const response = await axios.post(`${baseUrl}/api/generate`, {
+        model: 'qwen3',
+        prompt: fullPrompt,
+        stream: false,
+        format: options.responseMimeType === 'application/json' ? 'json' : undefined
+      }, { timeout: 90000 });
+      return response.data?.response || '';
+    } catch (err: any) {
+      if (err.code === 'ECONNREFUSED' || err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT') {
+        throw new Error('Ollama is not running. Start it with: ollama serve');
+      }
+      throw err;
+    }
+  }
+
+  private async generateStreamWithOllama(prompt: string, options: AIProviderOptions): Promise<AsyncGenerator<string, void, unknown>> {
+    const baseUrl = this.getOllamaBaseUrl();
+    let fullPrompt = prompt;
+    if (options.systemInstruction) fullPrompt = `System: ${options.systemInstruction}\n\nUser: ${prompt}`;
+    try {
+      const response = await axios.post(`${baseUrl}/api/generate`, {
+        model: 'qwen3',
+        prompt: fullPrompt,
+        stream: true
       }, { responseType: 'stream', timeout: 90000 });
 
       return this.parseOllamaStream(response.data);
