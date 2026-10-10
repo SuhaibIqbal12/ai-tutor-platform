@@ -73,7 +73,7 @@ Optional Supabase OAuth:
 
 ## Optional material extraction
 
-Text PDFs and Office files use local parsers. Scanned PDFs currently require a text/OCR version. Images require Gemini and a supported JPEG/PNG/WebP file.
+Text PDFs and Office files use local parsers. Scanned PDFs currently require a text/OCR version. Images require Groq or Gemini and a supported JPEG/PNG/WebP file.
 
 YouTube uses `youtube-transcript` with preserved caption offsets. For caption fallback, install `python3 -m pip install yt-dlp` on the worker and set `YOUTUBE_FALLBACK_ENABLED=true`, `PYTHON_BIN=python3`. Audio fallback additionally requires ffmpeg, `GEMINI_API_KEY`, and `YOUTUBE_AUDIO_FALLBACK_ENABLED=true`. It is bounded to 10 minutes/10MB and has no verified timestamps. These external extraction paths still require live smoke testing.
 
@@ -95,4 +95,4 @@ docker compose up --build -d
 
 Open http://localhost:3000. The API is http://localhost:3001; `/ready` reports whether the database, Redis, worker, authentication and provider configuration are ready. Compose runs migrations before the API and worker, retains database/Redis/model-cache volumes, and binds ports to your computer's loopback interface. Keep this local stack private; it is not a production hosting service. Stop with `docker compose down` without `--volumes` to retain data. Docker images still require a real provider smoke test and must be verified on a Docker-enabled host before release.
 
-Groq uses `openai/gpt-oss-120b` by default; set `GROQ_MODEL` to override. Keep `GEMINI_API_KEY` for hosted document embeddings and image understanding. Redeploy after changing environment variables.
+Groq uses `openai/gpt-oss-120b` by default; set `GROQ_MODEL` to override. Keep `GEMINI_API_KEY` for hosted document embeddings and audio transcription. Groq image extraction uses `qwen/qwen3.8-27b` (`GROQ_VISION_MODEL` overrides it). Redeploy after changing environment variables.

@@ -210,8 +210,10 @@ export class AIProviderService {
   private buildProviders(isMultimodal: boolean, isStream: boolean, prompt: any, options: AIProviderOptions) {
     const providers: Array<{ name: string; execute: () => Promise<any> }> = [];
 
-    if (!isMultimodal && process.env.GROQ_API_KEY) {
-      providers.push({ name: 'GROQ', execute: () => this.retryOperation(() => this.generateWithGroq(typeof prompt === 'string' ? prompt : JSON.stringify(prompt), options, isStream), 'GROQ') });
+    const groqVision = isMultimodal && Array.isArray(prompt) && prompt.some(p => p?.inlineData?.mimeType?.startsWith('image/'))
+      && prompt.every(p => typeof p === 'string' || p?.text || p?.inlineData?.mimeType?.startsWith('image/'));
+    if ((!isMultimodal || groqVision) && process.env.GROQ_API_KEY) {
+      providers.push({ name: 'GROQ', execute: () => this.retryOperation(() => this.generateWithGroq(groqVision ? prompt : typeof prompt === 'string' ? prompt : JSON.stringify(prompt), options, isStream, groqVision), 'GROQ') });
     }
 
     if (process.env.GEMINI_API_KEY) {
@@ -532,9 +534,14 @@ export class AIProviderService {
   // xAI / GROK METHODS
   // ==========================================
 
-  private async generateWithGroq(prompt: string | any[], options: AIProviderOptions, stream: boolean): Promise<any> {
-    const model = process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
-    const messages = this.buildOpenAIMessages(prompt, options);
+  private async generateWithGroq(prompt: string | any[], options: AIProviderOptions, stream: boolean, vision = false): Promise<any> {
+    const model = vision ? process.env.GROQ_VISION_MODEL || 'qwen/qwen3.8-27b' : process.env.GROQ_MODEL || 'openai/gpt-oss-120b';
+    const messages = vision ? [
+      ...(options.systemInstruction ? [{ role: 'system', content: options.systemInstruction }] : []),
+      { role: 'user', content: (prompt as any[]).map(part => part?.inlineData
+        ? { type: 'image_url', image_url: { url: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}` } }
+        : { type: 'text', text: typeof part === 'string' ? part : part.text }) }
+    ] : this.buildOpenAIMessages(prompt, options);
     const body: any = { model, messages, stream, temperature: options.temperature ?? 0.7, max_completion_tokens: 4096 };
     if (model.startsWith('openai/gpt-oss')) body.reasoning_effort = 'low';
     if (options.responseMimeType === 'application/json') {
@@ -746,46 +753,7 @@ export class AIProviderService {
     return this.parseSseStream(response.data);
   }
 
-  // ==========================================
-  // OLLAMA LOCAL METHODS (graceful if not running)
-  // ==========================================
-
-  private getOllamaBaseUrl(): string {
-    return process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
-  }
-
-  private async generateWithOllama(prompt: string, options: AIProviderOptions): Promise<string> {
-    const baseUrl = this.getOllamaBaseUrl();
-    let fullPrompt = prompt;
-    if (options.systemInstruction) fullPrompt = `System: ${options.systemInstruction}\n\nUser: ${prompt}`;
-    if (options.responseMimeType === 'application/json' && options.responseSchema) {
-      fullPrompt += `\n\nIMPORTANT: Respond ONLY with valid JSON conforming to this schema:\n${JSON.stringify(options.responseSchema, null, 2)}`;
-    }
-    try {
-      const response = await axios.post(`${baseUrl}/api/generate`, {
-        model: 'qwen3',
-        prompt: fullPrompt,
-        stream: false,
-        format: options.responseMimeType === 'application/json' ? 'json' : undefined
-      }, { timeout: 90000 });
-      return response.data?.response || '';
-    } catch (err: any) {
-      if (err.code === 'ECONNREFUSED' || err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT') {
-        throw new Error('Ollama is not running. Start it with: ollama serve');
-      }
-      throw err;
-    }
-  }
-
-  private async generateStreamWithOllama(prompt: string, options: AIProviderOptions): Promise<AsyncGenerator<string, void, unknown>> {
-    const baseUrl = this.getOllamaBaseUrl();
-    let fullPrompt = prompt;
-    if (options.systemInstruction) fullPrompt = `System: ${options.systemInstruction}\n\nUser: ${prompt}`;
-    try {
-      const response = await axios.post(`${baseUrl}/api/generate`, {
-        model: 'qwen3',
-        prompt: fullPrompt,
-        stream: true
+  // =========…455 tokens truncated…stream: true
       }, { responseType: 'stream', timeout: 90000 });
 
       return this.parseOllamaStream(response.data);

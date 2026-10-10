@@ -2,7 +2,7 @@ import { aiClient } from '../config/ai.provider';
 import { prisma } from '../config/prisma';
 import { AppError } from '../middleware/error.middleware';
 import { RagService, NO_EVIDENCE } from './rag.service';
-import { GROUNDING_INSTRUCTION, withVerifiedReferences } from '../rag/grounding';
+import { GROUNDING_INSTRUCTION, GROUNDING_GENERATION_CONFIG, withVerifiedReferences } from '../rag/grounding';
 
 export class TutorService {
   /**
@@ -475,17 +475,17 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
       }
       const promptWithContext = evidence ? `Retrieved evidence (JSON lines):\n${evidence.context}\n\nQuestion: ${question}` : question;
       const systemInstruction = ragMode
-        ? GROUNDING_INSTRUCTION + '\nAnswer the student question directly and concisely. Include the exact supporting [Source #N] citation. Do not add unrelated teaching sections.'
+        ? GROUNDING_INSTRUCTION + '\nReturn JSON with answer and sourceIds. sourceIds must use numeric IDs from the retrieved evidence. Answer directly and concisely; do not add unrelated teaching sections.'
         : await this.buildSystemInstruction(userId, activeSubject);
 
       let responseText = '';
 
       if (history.length > 0) {
-        const chat = aiClient.startChat(history, systemInstruction);
+        const chat = aiClient.startChat(history, systemInstruction, evidence ? GROUNDING_GENERATION_CONFIG : undefined);
         const result = await chat.sendMessage(promptWithContext);
         responseText = result.response.text();
       } else {
-        const result = await aiClient.generateContent(promptWithContext, systemInstruction);
+        const result = await aiClient.generateContent(promptWithContext, systemInstruction, evidence ? GROUNDING_GENERATION_CONFIG : undefined);
         responseText = result.response.text();
       }
 
@@ -530,11 +530,11 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
       }
       const promptWithContext = evidence ? `Retrieved evidence (JSON lines):\n${evidence.context}\n\nQuestion: ${question}` : question;
       const systemInstruction = ragMode
-        ? GROUNDING_INSTRUCTION + '\nAnswer the student question directly and concisely. Include the exact supporting [Source #N] citation. Do not add unrelated teaching sections.'
+        ? GROUNDING_INSTRUCTION + '\nReturn JSON with answer and sourceIds. sourceIds must use numeric IDs from the retrieved evidence. Answer directly and concisely; do not add unrelated teaching sections.'
         : await this.buildSystemInstruction(userId, activeSubject);
       // Buffer document-mode output until source IDs have been checked. General tutoring remains streamed.
       if (evidence) {
-        const response = history.length ? await aiClient.startChat(history, systemInstruction).sendMessage(promptWithContext) : await aiClient.generateContent(promptWithContext, systemInstruction);
+        const response = history.length ? await aiClient.startChat(history, systemInstruction, evidence ? GROUNDING_GENERATION_CONFIG : undefined).sendMessage(promptWithContext) : await aiClient.generateContent(promptWithContext, systemInstruction, evidence ? GROUNDING_GENERATION_CONFIG : undefined);
         const verified = withVerifiedReferences(response.response.text(), evidence.sources);
         await this.saveMessages(activeConversationId, question, verified);
         async function* grounded() { yield verified; }
@@ -544,7 +544,7 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
       let responseStreamResult: any;
 
       if (history.length > 0) {
-        const chat = aiClient.startChat(history, systemInstruction);
+        const chat = aiClient.startChat(history, systemInstruction, evidence ? GROUNDING_GENERATION_CONFIG : undefined);
         responseStreamResult = await chat.sendMessageStream(promptWithContext);
       } else {
         responseStreamResult = await aiClient.generateContentStream(promptWithContext, systemInstruction);

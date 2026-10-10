@@ -40,3 +40,20 @@ test('Grounding normalizes citation formatting without accepting invented IDs',(
  assert.throws(()=>withVerifiedReferences('720 [Source2]',sources),/unsupported/);
  assert.throws(()=>withVerifiedReferences('720 mAh',sources),/no supporting/);
 });
+
+test('Groq vision converts inline images to image_url and keeps audio on Gemini',async()=>{
+ const original=axios.post;let body;
+ axios.post=async(_url,payload)=>{body=payload;return {data:{choices:[{finish_reason:'stop',message:{content:'Visible text'}}]}}};
+ try{
+ const service=new AIProviderService();await service.getModel({systemInstruction:'Extract text'}).generateContent(['Read image',{inlineData:{mimeType:'image/png',data:'fixture-base64'}}]);
+ assert.equal(body.model,'qwen/qwen3.8-27b');assert.equal(body.messages.at(-1).content[1].image_url.url,'data:image/png;base64,fixture-base64');
+ assert.equal(service.buildProviders(true,false,[{inlineData:{mimeType:'audio/mp3',data:'x'}}],{}).length,0);
+ }finally{axios.post=original}
+});
+
+test('Structured grounding validates supplied IDs before formatting references',()=>{
+ const {withVerifiedReferences}=require('../dist/rag/grounding');const sources=[{id:1,title:'Learning PDF',pageNumber:1}];
+ assert.match(withVerifiedReferences(JSON.stringify({answer:'720 mAh',sourceIds:[1]}),sources),/720.*Source #1.*page 1/s);
+ for(const sourceIds of [[99],['1']])assert.throws(()=>withVerifiedReferences(JSON.stringify({answer:'720 mAh',sourceIds}),sources),/unsupported/);
+ assert.throws(()=>withVerifiedReferences(JSON.stringify({answer:'720 mAh',sourceIds:[]}),sources),/no supporting/);
+});

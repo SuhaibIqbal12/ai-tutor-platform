@@ -8,7 +8,22 @@ Do not substitute general knowledge. Distinguish inference from directly stated 
 Cite supporting evidence using [Source #N], where N is an ID supplied in the current evidence.
 Never invent document titles, pages, timestamps, quotations, or source IDs.
 Personalize explanation depth, never change the underlying facts.`;
+export const GROUNDING_GENERATION_CONFIG = {
+  responseMimeType: 'application/json',
+  responseSchema: { type: 'OBJECT', properties: {
+    answer: { type: 'STRING', description: 'A concise evidence-supported answer, or an explicit missing-evidence refusal.' },
+    sourceIds: { type: 'ARRAY', items: { type: 'INTEGER' }, description: 'Numeric IDs of the evidence supporting the answer. Never invent IDs.' }
+  }, required: ['answer', 'sourceIds'] }
+};
 export function withVerifiedReferences(answer: string, sources: RetrievedSource[]): string {
+  if (answer.trim().startsWith('{')) {
+    const parsed = JSON.parse(answer);
+    if (typeof parsed.answer !== 'string' || !parsed.answer.trim() || !Array.isArray(parsed.sourceIds)
+      || !parsed.sourceIds.every((id: unknown) => Number.isInteger(id) && sources.some(s => s.id === id))) {
+      throw new Error('AI returned an unsupported source reference');
+    }
+    answer = parsed.answer + (parsed.sourceIds.length ? '\n\n' + [...new Set<number>(parsed.sourceIds)].map(id => `[Source #${id}]`).join(' ') : '');
+  }
   // Normalize presentation differences while still rejecting unknown source IDs.
   answer = answer.replace(/\[Source\s*#?\s*(\d+)\]/gi, '[Source #$1]');
   const referenced = [...answer.matchAll(/\[Source #(\d+)\]/g)].map(m => +m[1]);
