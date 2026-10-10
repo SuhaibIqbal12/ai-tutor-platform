@@ -24,6 +24,9 @@ before(async () => {
     process.env.TEST_REDIS_URL = 'redis://127.0.0.1:16379';
   }
   if (process.env.TEST_REDIS_URL) process.env.REDIS_URL = process.env.TEST_REDIS_URL;
+  // Verify the connected integration wins over a stale legacy URL.
+  process.env.TUTOR_DATABASE_URL = process.env.DATABASE_URL;
+  process.env.DATABASE_URL = 'postgresql://postgres@127.0.0.1:1/stale';
   prisma = require('../dist/config/prisma').prisma;
   RagService = require('../dist/services/rag.service').RagService;
   TutorService = require('../dist/services/tutor.service').TutorService;

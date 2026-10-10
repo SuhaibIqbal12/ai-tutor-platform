@@ -4,6 +4,15 @@ The repository has two frontends: legacy Express `public/` and Next.js `frontend
 
 ## Backend and worker
 
+For a Neon integration connected with the `TUTOR` prefix, the backend uses
+`TUTOR_DATABASE_URL` ahead of `DATABASE_URL`. This preserves older settings.
+Set the backend deployment Build Command to `npm run build:deploy` to apply
+checked-in migrations before compiling. This command uses
+`TUTOR_DATABASE_URL_UNPOOLED` when available and stops if migration fails.
+Use it only for the intended deployment database; review and back up existing
+data and migration history before enabling it. The worker still needs a
+persistent host even when the API is deployed on Vercel.
+
 Run these on a persistent Node host/container (Node 22 LTS recommended), with PostgreSQL and Redis reachable from both processes. BullMQ workers and embedding downloads cannot rely on short-lived serverless functions.
 
 1. `npm ci`
