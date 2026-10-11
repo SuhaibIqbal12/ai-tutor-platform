@@ -28,6 +28,7 @@ export const analyzeResume = async (
       where: { userId },
       update: {
         resumeText,
+        resumeReview: JSON.stringify({ analysis, targetRole, fileName: req.file?.originalname || null }),
         atsScore: analysis.atsScore,
         skills: JSON.stringify(analysis.skillsIdentified || []),
         readinessScore: Math.min(Math.round((analysis.atsScore + 40) / 1.5), 100) // Formulate composite readiness score
@@ -35,6 +36,7 @@ export const analyzeResume = async (
       create: {
         userId,
         resumeText,
+        resumeReview: JSON.stringify({ analysis, targetRole, fileName: req.file?.originalname || null }),
         atsScore: analysis.atsScore,
         skills: JSON.stringify(analysis.skillsIdentified || []),
         readinessScore: Math.min(Math.round((analysis.atsScore + 40) / 1.5), 100)
@@ -136,4 +138,11 @@ export const getPracticeChallenge = async (
   } catch (err) {
     next(err);
   }
+};
+
+export const getResumeReview = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const profile = await prisma.placementProfile.findUnique({ where: { userId: req.user!.id }, select: { resumeReview: true } });
+    res.json({ status: 'success', data: { review: profile?.resumeReview ? JSON.parse(profile.resumeReview) : null } });
+  } catch (error) { next(error); }
 };

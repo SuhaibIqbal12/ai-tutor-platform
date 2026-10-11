@@ -167,3 +167,35 @@ test('resume file extraction succeeds and malformed files do not alter scores', 
   assert.equal((await fetch(origin+'/api/placement/resume/upload',{ method:'POST',headers:{ Authorization:`Bearer ${token}` },body:form })).status,422);
   assert.equal((await prisma.placementProfile.findUnique({where:{userId}})).atsScore,81);
 });
+
+test('deleted history is owner scoped, excluded from recall and can be restored', async () => {
+  const chat = await prisma.conversation.create({ data: { userId, title: 'UniqueDeletedTopic', subject: 'DeletedSubject', messages: { create: [{ role: 'user', content: 'UniqueDeletedTopic' }, { role: 'model', content: 'Explanation' }] } } });
+  const outsider = await prisma.user.create({ data: { email: 'delete-other@example.test', password: 'irrelevant' } });
+  const otherChat = await prisma.conversation.create({ data: { userId: outsider.id, title: 'Private' } });
+  async function mutate(id, method, suffix='') {
+    const res = await fetch(origin+'/api/tutor/conversations/'+id+suffix,{method,headers:{Authorization:`Bearer ${token}`}}); return res.status;
+  }
+  assert.equal(await mutate(otherChat.id,'DELETE'),404);
+  assert.equal(await mutate(chat.id,'DELETE'),200);
+  assert.equal((await request('/api/tutor/conversations/'+chat.id)).status,404);
+  assert.equal((await request('/api/tutor/conversations?search=UniqueDeletedTopic')).data.data.conversations.length,0);
+  assert.equal((await request('/api/tutor/ask',{question:'Explain something',conversationId:chat.id})).status,404);
+  const recall=await request('/api/tutor/ask',{question:'Can you recall my old topics?'});
+  assert.ok(!recall.data.data.response.includes('UniqueDeletedTopic'));
+  assert.equal(await prisma.message.count({where:{conversationId:chat.id}}),2);
+  assert.equal(await mutate(otherChat.id,'POST','/restore'),404);
+  assert.equal(await mutate(chat.id,'POST','/restore'),200);
+  assert.equal((await request('/api/tutor/conversations/'+chat.id)).data.data.messages.length,2);
+});
+test('saved resume review survives retrieval and failed replacement; is private', async () => {
+  const saved=await request('/api/placement/resume');
+  assert.equal(saved.status,200); assert.equal(saved.data.data.review.analysis.atsScore,81);
+  assert.equal(saved.data.data.review.fileName,'resume.odt');
+  const bad=new FormData();bad.append('file',new Blob(['broken']),'resume.pdf');
+  assert.equal((await fetch(origin+'/api/placement/resume/upload',{method:'POST',headers:{Authorization:`Bearer ${token}`},body:bad})).status,422);
+  assert.deepEqual((await request('/api/placement/resume')).data.data.review,saved.data.data.review);
+  const another=await request('/api/auth/register',{email:'resume-private@example.test',password:'Secure1234!'},false);
+  const previous=token;token=another.data.data.token;
+  try { assert.equal((await request('/api/placement/resume')).data.data.review,null); }
+  finally { token=previous; }
+});

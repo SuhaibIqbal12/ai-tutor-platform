@@ -220,6 +220,9 @@ export default function TutorPage() {
   const [historySearch, setHistorySearch] = useState("");
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [olderCursor, setOlderCursor] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<HistoryChat | null>(null);
+  const [deletedChat, setDeletedChat] = useState<HistoryChat | null>(null);
+  const [historyBusy, setHistoryBusy] = useState(false);
   const [historyError, setHistoryError] = useState("");
   const storageKey = useRef("");
   const watchingStream = useRef(false);
@@ -236,7 +239,17 @@ export default function TutorPage() {
       const { data } = await apiRequest(`/api/tutor/conversations/${id}`);
       applySaved({ ...data, conversationId: data.id, ragEnabled: data.ragMode, mode: data.explanationMode, input: draft });
       setOlderCursor(data.olderCursor); setHistoryOpen(false); setHistoryError("");
-    } catch (error) { setHistoryError(error instanceof Error ? error.message : "Unable to open conversation."); }
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Conversation not found.') {
+        let cachedId = '';
+        try { cachedId = JSON.parse(localStorage.getItem(storageKey.current) || '{}').conversationId; } catch {}
+        if (id === conversationId || id === cachedId) {
+          setMessages([]); setConversationId(''); setInput(''); setOlderCursor(null);
+          localStorage.removeItem(storageKey.current);
+        }
+      }
+      setHistoryError(error instanceof Error ? error.message : "Unable to open conversation.");
+    }
   };
   useEffect(() => {
     storageKey.current = `tutor-active:${getStoredEmail() || "account"}`;
@@ -271,6 +284,28 @@ export default function TutorPage() {
       setHistory(previous => cursor ? [...previous,...data.conversations] : data.conversations);
       setHistoryCursor(data.nextCursor); setHistoryError("");
     } catch (error) { setHistoryError(error instanceof Error ? error.message : "Unable to load history."); }
+  };
+  const deleteChat = async () => {
+    if (!deleteTarget || streaming || historyBusy) return;
+    setHistoryBusy(true);
+    try {
+      await apiRequest(`/api/tutor/conversations/${deleteTarget.id}`, 'DELETE');
+      if (conversationId === deleteTarget.id) {
+        setMessages([]); setConversationId(''); setInput(''); setOlderCursor(null);
+        localStorage.removeItem(storageKey.current);
+      }
+      setDeletedChat(deleteTarget); setDeleteTarget(null); await loadHistory();
+    } catch (error) { setHistoryError(error instanceof Error ? error.message : 'Unable to delete conversation.'); }
+    finally { setHistoryBusy(false); }
+  };
+  const undoDelete = async () => {
+    if (!deletedChat || historyBusy) return;
+    setHistoryBusy(true);
+    try {
+      await apiRequest(`/api/tutor/conversations/${deletedChat.id}/restore`, 'POST');
+      setDeletedChat(null); await loadHistory();
+    } catch (error) { setHistoryError(error instanceof Error ? error.message : 'Unable to restore conversation.'); }
+    finally { setHistoryBusy(false); }
   };
   const [readySources, setReadySources] = useState<DocumentSource[]>([]);
   useEffect(() => {
@@ -639,7 +674,16 @@ export default function TutorPage() {
         </form>
         {historyError && <p role="alert">{historyError}</p>}
         {!history.length && <p className="text-sm text-muted-foreground">No saved conversations found.</p>}
-        {history.map(chat => <button key={chat.id} type="button" onClick={() => void openConversation(chat.id)} className="block text-left w-full p-2 border rounded hover:bg-secondary"><strong className="text-sm">{chat.title}</strong><span className="block text-xs text-muted-foreground">{chat.subject} · {new Date(chat.updatedAt).toLocaleString()}</span></button>)}
+        {deletedChat && <p role="status" className="text-sm">Conversation deleted. <button type="button" disabled={historyBusy} onClick={() => void undoDelete()} className="underline">Undo</button></p>}
+        {deleteTarget && <div role="alertdialog" aria-label="Delete conversation" className="p-3 border rounded space-y-2">
+          <p>Delete “{deleteTarget.title}” from your history?</p>
+          <button type="button" disabled={historyBusy || streaming} onClick={() => void deleteChat()} className="text-red-600 mr-4">Confirm delete</button>
+          <button type="button" disabled={historyBusy} onClick={() => setDeleteTarget(null)}>Cancel</button>
+        </div>}
+        {history.map(chat => <div key={chat.id} className="flex items-center gap-2 border rounded">
+          <button type="button" disabled={historyBusy || streaming} onClick={() => void openConversation(chat.id)} className="text-left flex-1 p-2 hover:bg-secondary"><strong className="text-sm">{chat.title}</strong><span className="block text-xs text-muted-foreground">{chat.subject} · {new Date(chat.updatedAt).toLocaleString()}</span></button>
+          <button type="button" aria-label={`Delete ${chat.title}`} disabled={historyBusy || streaming} onClick={() => { setDeleteTarget(chat); setHistoryError(''); }} className="px-3 py-2 text-xs text-red-600">Delete</button>
+        </div>)}
         {historyCursor && <button type="button" onClick={() => void loadHistory(historyCursor)}>Load more conversations</button>}
       </section>}
       {olderCursor && <button type="button" className="text-xs p-2 border-t" onClick={async () => {

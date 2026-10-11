@@ -11,7 +11,7 @@ import type {
 import { errorMessage } from "@/lib/contracts";
 
 import { uploadResume } from "@/lib/api";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Compass,
   FileBadge,
@@ -63,6 +63,10 @@ export default function CareerPage() {
   const [loading, setLoading] = useState(false);
   const [customSkills, setCustomSkills] = useState("");
   const [roadmap, setRoadmap] = useState<Roadmap | null>(null);
+  const [resumeLoading, setResumeLoading] = useState(false);
+  const [resumeError, setResumeError] = useState("");
+  const [reviewFileName, setReviewFileName] = useState("");
+  const resumeEdited = useRef(false);
   const [resumeRole, setResumeRole] = useState("Software Engineer");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [resumeAnalysis, setResumeAnalysis] = useState<ResumeAnalysis | null>(
@@ -88,6 +92,18 @@ export default function CareerPage() {
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [showAnswer, setShowAnswer] = useState(false);
 
+  useEffect(() => {
+    let active = true;
+    apiRequest('/api/placement/resume').then(({ data }) => {
+      if (active && !resumeEdited.current && data.review) {
+        setResumeAnalysis(data.review.analysis);
+        setResumeRole(data.review.targetRole || 'Software Engineer');
+        setReviewFileName(data.review.fileName || 'Saved resume');
+      }
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+
   const handleGenerateRoadmap = async () => {
     setLoading(true);
     setRoadmap(null);
@@ -109,15 +125,16 @@ export default function CareerPage() {
 
   const handleAnalyzeResume = async () => {
     if (!resumeFile) return;
-    setLoading(true);
-    setResumeAnalysis(null);
+    setResumeLoading(true);
+    setResumeError("");
+    resumeEdited.current = true;
     try {
       const res = await uploadResume(resumeFile, resumeRole);
-      if (res.status === "success") setResumeAnalysis(res.data.analysis);
+      if (res.status === "success") { setResumeAnalysis(res.data.analysis); setReviewFileName(resumeFile.name); }
     } catch (err: unknown) {
-      notify("Failed: " + errorMessage(err));
+      setResumeError(errorMessage(err));
     } finally {
-      setLoading(false);
+      setResumeLoading(false);
     }
   };
 
@@ -306,15 +323,15 @@ export default function CareerPage() {
                   aria-label="Target Role"
                   type="text"
                   value={resumeRole}
-                  onChange={(e) => setResumeRole(e.target.value)}
+                  onChange={(e) => { resumeEdited.current = true; setResumeRole(e.target.value); }}
                   className="w-full p-2.5 border border-border bg-secondary/30 rounded-xl text-xs focus:outline-none focus:border-indigo-500 text-foreground"
                 />
                 <button
                   onClick={handleAnalyzeResume}
-                  disabled={loading || !resumeFile}
+                  disabled={resumeLoading || !resumeFile}
                   className="w-full py-2 bg-primary hover:opacity-90 text-primary-foreground rounded-xl text-xs font-bold transition-colors cursor-pointer shadow disabled:opacity-50"
                 >
-                  {loading ? "Parsing..." : "Audit Resume Score"}
+                  {resumeLoading ? "Reviewing resume..." : "Audit Resume Score"}
                 </button>
               </div>
               <div className="md:col-span-2">
@@ -322,19 +339,22 @@ export default function CareerPage() {
                   <FileText className="h-3.5 w-3.5" /> Upload your resume
                 </label>
                 <input type="file" aria-label="Resume file" accept=".pdf,.docx,.xlsx,.odt,.txt"
-                  onChange={(event) => { setResumeFile(event.target.files?.[0] || null); setResumeAnalysis(null); }}
+                  disabled={resumeLoading}
+                  onChange={(event) => { resumeEdited.current = true; setResumeFile(event.target.files?.[0] || null); setResumeError(""); }}
                   className="w-full p-4 border border-border rounded-xl" />
                 <p className="text-xs text-muted-foreground mt-3">PDF, Word, Excel, ODT or text · maximum 4 MiB. Scanned PDFs need selectable text. Your score is an advisory assessment against the target role.</p>
                 {resumeFile && <p className="text-sm mt-2">Selected: {resumeFile.name}</p>}
               </div>
             </div>
           </div>
+          {resumeError && <p role="alert" className="p-4 border border-red-500/30 rounded-xl text-red-600">{resumeError}</p>}
           {resumeAnalysis && (
             <div className="bg-card border border-border rounded-xl p-6 space-y-4">
+              <p className="text-sm text-muted-foreground">Review: {reviewFileName}</p>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center border-b border-border pb-5">
                 <div className="text-center p-6 bg-secondary/40 border border-border rounded-xl">
                   <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    ATS Score
+                    Advisory resume score
                   </span>
                   <span className="text-4xl font-extrabold font-mono text-foreground mt-2 block">
                     {resumeAnalysis.atsScore} / 100
@@ -356,8 +376,7 @@ export default function CareerPage() {
                   </span>
                   <ul className="list-disc pl-4 text-xs text-foreground/80 space-y-1 font-medium">
                     {resumeAnalysis.improvements
-                      ?.slice(0, 4)
-                      .map((imp: string, i: number) => (
+                      ?.map((imp: string, i: number) => (
                         <li key={i}>{imp}</li>
                       ))}
                   </ul>

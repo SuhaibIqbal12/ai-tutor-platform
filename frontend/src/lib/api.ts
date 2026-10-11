@@ -243,10 +243,20 @@ export async function getDocumentProgress(documentId: string) {
 }
 
 export async function uploadResume(file: File, targetRole: string) {
+  if (!file.size) throw new Error('This file is empty. Choose your resume again.');
   if (file.size > 4 * 1024 * 1024) throw new Error('Select a resume smaller than 4 MiB.');
-  const body = new FormData(); body.append('file',file); body.append('targetRole',targetRole);
-  const response = await fetch('/api/placement/resume/upload', { method: 'POST', headers: { Authorization: `Bearer ${getStoredToken()}` }, body });
-  const result = await response.json();
+  if (!/\.(pdf|docx|xlsx|odt|txt)$/i.test(file.name)) throw new Error('Choose PDF, DOCX, XLSX, ODT or TXT.');
+  const token = getStoredToken();
+  if (!token) throw new Error('Sign in again before uploading your resume.');
+  const body = new FormData(); body.append('file',file); body.append('targetRole',targetRole.trim() || 'Software Engineer');
+  const response = await fetch('/api/placement/resume/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body });
+  const text = await response.text();
+  let result;
+  try { result = JSON.parse(text); } catch {
+    throw new Error(response.status === 413 ? 'Select a resume smaller than 4 MiB.' : `Resume service returned an unexpected response (${response.status}). Please retry.`);
+  }
+  if (response.status === 401) { clearStoredAuth(); throw new Error('Your session expired. Sign in again to review your resume.'); }
   if (!response.ok) throw new Error(result.message || 'Resume analysis failed.');
+  if (result.status !== 'success' || !result.data?.analysis) throw new Error('The review was incomplete. Please retry.');
   return result;
 }

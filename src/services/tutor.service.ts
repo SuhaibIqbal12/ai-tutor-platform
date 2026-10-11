@@ -35,7 +35,7 @@ export class TutorService {
         include: { messages: { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 30 } },
       });
 
-      if (!conversation) {
+      if (!conversation || conversation.deletedAt) {
         throw new AppError('Conversation not found.', 404);
       }
 
@@ -567,7 +567,7 @@ Cover: web application security (OWASP Top 10 — SQL injection, XSS, CSRF, SSRF
 
   private async recallStudyHistory(userId: string, question: string): Promise<string | undefined> {
     if (!/(?:what.*(?:studied|covered|learned)|recall.*(?:old|topics?|subjects?|previous)|remember.*(?:studied|topics?|conversation)|have.*(?:studied|learned|covered))/i.test(question)) return;
-    const past = await prisma.conversation.findMany({ where: { userId, messages: { some: { role: 'user' } } },
+    const past = await prisma.conversation.findMany({ where: { userId, deletedAt: null, messages: { some: { role: 'user' } } },
       orderBy: { updatedAt: 'desc' }, take: 100,
       select: { title: true, subject: true, messages: { where: { role: 'user' }, orderBy: { createdAt: 'desc' }, take: 3, select: { content: true } } } });
     if (!past.length) return 'I do not see earlier saved study conversations for this account yet. Chats in another account or sessions that were never saved are not available here.';

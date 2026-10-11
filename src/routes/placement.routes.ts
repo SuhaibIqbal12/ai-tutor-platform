@@ -3,7 +3,7 @@ import multer from 'multer';
 import { extract } from '../rag/extraction';
 import { AppError } from '../middleware/error.middleware';
 import { Router } from 'express';
-import { analyzeResume, chatMockInterview, getPracticeChallenge } from '../controllers/placement.controller';
+import { analyzeResume, getResumeReview, chatMockInterview, getPracticeChallenge } from '../controllers/placement.controller';
 import { authMiddleware } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -20,12 +20,13 @@ router.post('/resume/upload', authMiddleware as any, resumeUpload.single('file')
     let extracted;
     try { extracted = await extract({ fileType: type, fileBufferBase64: file.buffer.toString('base64') }); }
     catch (error) { if (error instanceof AppError) throw error; throw new AppError('Unable to read this resume. Check that the file is valid and contains selectable text.',422); }
-    req.body = { resumeText: extracted.segments.map(s => s.text).join('\n'), targetRole: req.body.targetRole || 'Software Engineer' };
+    req.body = { resumeText: extracted.segments.map(s => s.text).join('\n'), targetRole: req.body.targetRole?.trim() || 'Software Engineer' };
     next();
   } catch (error) { next(error); }
 }, validateModule(moduleInputs.resume), analyzeResume);
 
 // POST /api/placement/resume
+router.get('/resume', authMiddleware as any, getResumeReview);
 router.post('/resume', authMiddleware as any, validateModule(moduleInputs.resume), analyzeResume);
 
 // POST /api/placement/interview

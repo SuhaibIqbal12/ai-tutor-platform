@@ -15,7 +15,7 @@ describe('tutor continuity', () => {
   it('reopens saved history and restores the subject and chosen teaching style', async () => {
     render(<TutorPage />);
     fireEvent.click(screen.getByRole('button',{name:'History'}));
-    fireEvent.click(await screen.findByRole('button',{name:/Round robin/}));
+    fireEvent.click(await screen.findByRole('button',{name:/^Round robin/}));
     expect(await screen.findByText('Saved OS explanation')).toBeTruthy();
     expect((screen.getByLabelText('Explanation style') as HTMLSelectElement).value).toBe('visual');
   });
@@ -49,4 +49,39 @@ describe('tutor continuity', () => {
     await waitFor(() => expect((screen.getByLabelText('Your question') as HTMLInputElement).disabled).toBe(false));
   });
 
+});
+
+it('confirms deletion, clears the active conversation and supports undo', async () => {
+  localStorage.setItem('tutor-active:student@example.test',JSON.stringify({conversationId:'os',messages:[],subject:'OperatingSystems',mode:'visual'}));
+  const defaultRequest=mock.request.getMockImplementation()!;
+  let deleted=false;
+  mock.request.mockImplementation(async (url: string, method?: string) => {
+    if (method==='DELETE') { deleted=true; return {status:'success'}; }
+    if (url.endsWith('/restore')) { deleted=false; return {status:'success'}; }
+    if (url.includes('conversations?') && deleted) return {data:{conversations:[],nextCursor:null}};
+    return defaultRequest(url);
+  });
+  render(<TutorPage />);await screen.findByText('Saved OS explanation');
+  fireEvent.click(screen.getByRole('button',{name:'History'}));
+  fireEvent.click(await screen.findByRole('button',{name:'Delete Round robin'}));
+  expect(mock.request).not.toHaveBeenCalledWith('/api/tutor/conversations/os','DELETE');
+  fireEvent.click(screen.getByRole('button',{name:'Confirm delete'}));
+  await screen.findByText('No saved conversations found.');
+  expect(screen.queryByText('Saved OS explanation')).toBeNull();
+  await waitFor(() => expect(JSON.parse(localStorage.getItem('tutor-active:student@example.test')!).conversationId).toBe(''));
+  fireEvent.click(screen.getByRole('button',{name:'Undo'}));
+  await screen.findByRole('button',{name:/^Round robin/});
+  expect(mock.request).toHaveBeenCalledWith('/api/tutor/conversations/os/restore','POST');
+});
+
+it('clears cached messages when the conversation was deleted in another session', async () => {
+  localStorage.setItem('tutor-active:student@example.test',JSON.stringify({conversationId:'os',messages:[{role:'model',content:'Deleted cached answer'}]}));
+  const defaultRequest=mock.request.getMockImplementation()!;
+  mock.request.mockImplementation(async (url: string) => {
+    if (url==='/api/tutor/conversations/os') throw new Error('Conversation not found.');
+    return defaultRequest(url);
+  });
+  render(<TutorPage />);
+  await waitFor(()=>expect(screen.queryByText('Deleted cached answer')).toBeNull());
+  await waitFor(()=>expect(JSON.parse(localStorage.getItem('tutor-active:student@example.test')!).conversationId).toBe(''));
 });
