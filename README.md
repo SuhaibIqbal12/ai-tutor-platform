@@ -5,9 +5,15 @@
 
 **TypeScript · Next.js · Express · Prisma · PostgreSQL · Gemini**
 
-[Getting started](#getting-started) · [Architecture](#architecture) · [Development checks](#development-checks)
+[Open live dashboard](https://ai-tutor-workspace.vercel.app/dashboard) · [Getting started](#getting-started) · [Architecture](#architecture) · [Development checks](#development-checks)
 
 </div>
+
+## Live application
+
+**[Open AI Tutor Dashboard](https://ai-tutor-workspace.vercel.app/dashboard)**
+
+Sign in to access your saved chats, library, practice, and career tools.
 
 ## Overview
 
